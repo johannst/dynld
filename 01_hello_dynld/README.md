@@ -1,16 +1,17 @@
 # Hello dynamic linking
 
 In `dynamic linking` a program can use code that is not contained in the
-program itself but rather in separate library files, so called shared objects.
+program file itself but rather in separate library files, so called shared
+objects.
 
-A statically linked program contains all the `code` & `data` that it needs to
-run from start until completion. The program will be loaded by the OS from the
-disk into the virtual address space and control is handed over to the mapped
-program.
+In comparison a statically linked program contains all the `code` & `data` that
+it needs to run from start until completion. The program will be loaded by the
+Linux Kernel from the disk into the virtual address space and control is handed
+over to the mapped program which then executes.
 ```text
-                            @vm
+                          @vm
                          |        |
-  @disk                  |--------|
+ @disk                   |--------|
 +--------+   execve(2)   |        | <- $rip
 | prog A | ------------> | prog A |
 +--------+               |        |
@@ -18,33 +19,35 @@ program.
                          |        |
 ```
 
-A dynamically linked program needs to specify a `dynamic linker` which is
-basically a runtime interpreter. The OS will additionally load that interpreter
-into the virtual address space and give control to the interpreter rather than
-the user program.
-The interpreter will prepare the execution environment, like loading the
-dependencies and so on and once that is done pass control to the user program.
+A dynamically linked program on the other hand needs to specify a `dynamic
+linker` which is basically a runtime interpreter. The Linux Kernel will additionally load
+that interpreter into the virtual address space and give control to the
+interpreter rather than the user program.
+The interpreter will prepare the execution environment for the user program by
+for example loading dependencies and running initialization routines. After the
+environment is set up the dynamic linker passes control to the user program.
 ```text
-                                  @vm                      @vm
+                                @vm                      @vm
                                |        |               |          |
-  @disk                        |--------|               |----------|
+ @disk                         |--------|               |----------|
 +--------------+   execve(2)   |        |               |          | <- $rip
 | prog A       | ------------> | prog A |               | prog A   |
 +--------------+               |        |   load deps   |          |
 | interp ldso  |               |--------| ------------> |----------|
-| dep libgreet |               |        |               |          |
-+--------------+               |--------|               |----------|
-                               | ldso   | <- $rip       | ldso     |
++--------------+               |        |               |          |
+| dep libgreet |               |--------|               |----------|
++--------------+               | ldso   | <- $rip       | ldso     |
                                |--------|               |----------|
                                                         |          |
                                                         |----------|
                                                         | libgreet |
                                                         |----------|
 ```
-> NOTE: Technically the OS does not need to load the user program itself in
-> case it is dynamically linked, but that detail is not important here.
+> NOTE: Technically the Linux Kernel does not need to load the dynamically
+> linked user program itself, but that detail is not important here.
 
-In `ELF` files the name of the dynamic linker is specified in the `.interp` section.
+In the `ELF` binary format the name of the dynamic linker is specified as a
+string in the special section `.interp`.
 ```bash
 readelf -W --string-dump .interp main
 
@@ -53,9 +56,9 @@ String dump of section '.interp':
 ```
 
 The `.interp` section is referenced by the `PT_INTERP` segment in the program
-headers. During `execve(2)` in the [`load_elf_binary`][load_elf_binary]
-function (Linux Kernel) this segment is used to check if the program needs a
-dynamic linker and to get its name.
+headers. This segment is used by the Linux Kernel during the `execve(2)`
+syscall in the [`load_elf_binary`][load_elf_binary] function to check if the
+program needs a dynamic linker and if so to retrieve its name.
 ```bash
 readelf -W --sections --program-headers main
 
@@ -73,9 +76,11 @@ Program Headers:
     ...
 ```
 
-Using `gdb` to break on the first instruction (`starti`) and printing the
-backtrace (`bt`) it can be seen that the control first is passed to the
-dynamic linker `ld-linux-x86.so.2` rather than to the user program.
+With the use of `gdb` it can be easily verified that the control is first
+passed to the dynamic linker and not the user program. This is shown by
+stopping at the first instruction of the new process (`starti`) and examining
+the backtrace (`bt`). Where `ld-linux-x86-64.so` is the dynamic linker as shown
+in the `.interp` section above.
 ```bash
 gdb -q --batch -ex 'starti' -ex 'bt' ./main
 
@@ -86,13 +91,13 @@ Program stopped.
 #2  0x00007fffffffe43e in ?? ()
 #3  0x0000000000000000 in ?? ()
 ```
-> NOTE: Frames `#1`, `#2`, `#3` don't actually exist, gdb's unwinder just tried to further unwind the stack.
+> NOTE: Frames `#1 - #3` don't actually exist, gdb's unwinder just tried to further unwind the stack.
 
 ## Things to remember
 - Dynamically linked programs use code contained in separate library files.
-- The `dynamic linker` is an interpreter loaded by the OS and gets control
-  before the user program.
+- The `dynamic linker` is an interpreter loaded by the Linux Kernel and gets
+  control before the user program.
 - A dynamically linked program specifies the dynamic linker needed in the
-  `.interp` ELF section.
+  `.interp` section.
 
 [load_elf_binary]: https://elixir.bootlin.com/linux/v5.9.8/source/fs/binfmt_elf.c#L850
