@@ -1,3 +1,5 @@
+# Copyright (c) 2020 Johannes Stoelp
+
 inspect: build
 	readelf -W --sections main
 	readelf -W --dynamic main
