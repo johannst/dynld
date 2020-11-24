@@ -4,7 +4,7 @@ check: build
 	./checker
 
 build: checker.cc
-	g++ -o cHecker -g -O2 -I ../include -Wall -Wextra $^
+	g++ -o checker -g -O2 -I ../include -Wall -Wextra $^
 
 clean:
 	rm -f checker
