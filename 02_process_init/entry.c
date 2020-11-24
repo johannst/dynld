@@ -1,26 +1,14 @@
 // Copyright (c) 2020 Johannes Stoelp
 
-#include <asm/unistd.h>
 #include <elf.h>
-#include <fmt.h>
-#include <stdint.h>
-#include <syscall.h>
+#define MAX_PRINTF_LEN 128
+#include <io.h>
 
 #if !defined(__linux__) || !defined(__x86_64__)
 #    error "Only supported in linux(x86_64)!"
 #endif
 
-int dynld_printf(const char* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    char buf[64];
-    int ret = dynld_vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-    syscall3(__NR_write, 1 /* stdout */, buf, ret);
-    return ret;
-}
-
-void entry(long* prctx) {
+void entry(const long* prctx) {
     // Interpret data on the stack passed by the OS kernel as specified in the
     // x86_64 SysV ABI.
 
