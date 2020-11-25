@@ -1,5 +1,12 @@
 # Process Initialization
 
+### Goals
+- Understand process state on process entry as specified by the
+  [SystemV x86-64 ABI][sysv_x86_64]
+- Build `no-std` program to visualize process state
+
+---
+
 Before starting to implement a minimal dynamic linker the first step is to
 understand the `process initialization` in further depth.
 Which is important because when starting a new process
@@ -12,7 +19,7 @@ Which is important because when starting a new process
 
 Before transferring control to a new user process the Linux Kernel provides some
 data on the `stack` with the format following the specification in the
-[`SystemV x86-64 ABI`][sysv_x86_64] chapter _Initial Stack and Register State_.
+[SystemV x86-64 ABI][sysv_x86_64] chapter _Initial Stack and Register State_.
 
 ## Stack state on process entry
 
@@ -91,7 +98,7 @@ Where `AT_NULL` is used to indicate the end of `AUXV`.
 ## Register state on process entry
 
 Regarding the state of general purpose registers on process entry the
-[`x86-64 SystemV ABI`][sysv_x86_64] states that all registers except the ones listed
+[x86-64 SystemV ABI][sysv_x86_64] states that all registers except the ones listed
 below are in an unspecified state:
 - `$rbp`: content is unspecified, but user code should set it to zero to mark
   the deepest stack frame
@@ -280,7 +287,7 @@ Print auxiliary vector
 
 ## Things to remember
 - On process entry the Linux Kernel provides data on the stack as specified in
-  the `SystemV ABI`
+  the [SystemV ABI][sysv_x86_64]
 - By default the `static linker` adds additional code which contains the
   `_start` symbol being the default process `entry point`
 
