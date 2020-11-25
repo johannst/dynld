@@ -20,12 +20,15 @@ over to the mapped program which then executes.
 ```
 
 A dynamically linked program on the other hand needs to specify a `dynamic
-linker` which is basically a runtime interpreter. The Linux Kernel will additionally load
-that interpreter into the virtual address space and give control to the
-interpreter rather than the user program.
-The interpreter will prepare the execution environment for the user program by
-for example loading dependencies and running initialization routines. After the
-environment is set up the dynamic linker passes control to the user program.
+linker` which is basically a runtime interpreter. The Linux Kernel will
+additionally load that interpreter into the virtual address space and give
+control to the interpreter rather than the user program.
+The interpreter will prepare the execution environment for the user program
+and pass control to it afterwards.
+Typical tasks of the interpreter are:
+- loading shared objects into memory
+- performing re-location
+- running initialization routines
 ```text
                                 @vm                      @vm
                                |        |               |          |
