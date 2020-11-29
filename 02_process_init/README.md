@@ -222,31 +222,31 @@ Finally the data can be printed as
 ```c
 // entry
   ...
-  dynld_printf("Got %d arg(s)\n", argc);
+  pfmt("Got %d arg(s)\n", argc);
   for (const char** arg = argv; *arg; ++arg) {
-      dynld_printf("\targ = %s\n", *arg);
+      pfmt("\targ = %s\n", *arg);
   }
 
   const int max_env = 10;
-  dynld_printf("Print first %d env var(s)\n", max_env - 1);
+  pfmt("Print first %d env var(s)\n", max_env - 1);
   for (const char** env = envv; *env && (env - envv < max_env); ++env) {
-      dynld_printf("\tenv = %s\n", *env);
+      pfmt("\tenv = %s\n", *env);
   }
 
-  dynld_printf("Print auxiliary vector\n");
-  dynld_printf("\tAT_EXECFD: %ld\n", auxv[AT_EXECFD]);
-  dynld_printf("\tAT_PHDR  : %p\n", auxv[AT_PHDR]);
-  dynld_printf("\tAT_PHENT : %ld\n", auxv[AT_PHENT]);
-  dynld_printf("\tAT_PHNUM : %ld\n", auxv[AT_PHNUM]);
-  dynld_printf("\tAT_PAGESZ: %ld\n", auxv[AT_PAGESZ]);
-  dynld_printf("\tAT_BASE  : %lx\n", auxv[AT_BASE]);
-  dynld_printf("\tAT_FLAGS : %ld\n", auxv[AT_FLAGS]);
-  dynld_printf("\tAT_ENTRY : %p\n", auxv[AT_ENTRY]);
-  dynld_printf("\tAT_NOTELF: %lx\n", auxv[AT_NOTELF]);
-  dynld_printf("\tAT_UID   : %ld\n", auxv[AT_UID]);
-  dynld_printf("\tAT_EUID  : %ld\n", auxv[AT_EUID]);
-  dynld_printf("\tAT_GID   : %ld\n", auxv[AT_GID]);
-  dynld_printf("\tAT_EGID  : %ld\n", auxv[AT_EGID]);
+  pfmt("Print auxiliary vector\n");
+  pfmt("\tAT_EXECFD: %ld\n", auxv[AT_EXECFD]);
+  pfmt("\tAT_PHDR  : %p\n", auxv[AT_PHDR]);
+  pfmt("\tAT_PHENT : %ld\n", auxv[AT_PHENT]);
+  pfmt("\tAT_PHNUM : %ld\n", auxv[AT_PHNUM]);
+  pfmt("\tAT_PAGESZ: %ld\n", auxv[AT_PAGESZ]);
+  pfmt("\tAT_BASE  : %lx\n", auxv[AT_BASE]);
+  pfmt("\tAT_FLAGS : %ld\n", auxv[AT_FLAGS]);
+  pfmt("\tAT_ENTRY : %p\n", auxv[AT_ENTRY]);
+  pfmt("\tAT_NOTELF: %lx\n", auxv[AT_NOTELF]);
+  pfmt("\tAT_UID   : %ld\n", auxv[AT_UID]);
+  pfmt("\tAT_EUID  : %ld\n", auxv[AT_EUID]);
+  pfmt("\tAT_GID   : %ld\n", auxv[AT_GID]);
+  pfmt("\tAT_EGID  : %ld\n", auxv[AT_EGID]);
   ...
 ```
 The full source code of the `entry` function is available in [entry.c](./entry.c).

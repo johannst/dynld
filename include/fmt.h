@@ -6,42 +6,11 @@
 
 #define ALLOW_UNUSED __attribute__((unused))
 
-ALLOW_UNUSED
-static const char* num2dec(char* buf, unsigned long len, unsigned long long num) {
-    char* pbuf = buf + len - 1;
-    *pbuf = '\0';
-
-    if (num == 0) {
-        *(--pbuf) = '0';
-    }
-
-    while (num > 0 && pbuf != buf) {
-        char d = (num % 10) + '0';
-        *(--pbuf) = d;
-        num /= 10;
-    }
-    return pbuf;
-}
+static const char* num2dec(char* buf, unsigned long len, unsigned long long num);
+static const char* num2hex(char* buf, unsigned long len, unsigned long long num);
 
 ALLOW_UNUSED
-static const char* num2hex(char* buf, unsigned long len, unsigned long long num) {
-    char* pbuf = buf + len - 1;
-    *pbuf = '\0';
-
-    if (num == 0) {
-        *(--pbuf) = '0';
-    }
-
-    while (num > 0 && pbuf != buf) {
-        char d = (num & 0xf);
-        *(--pbuf) = d + (d > 9 ? 'a' - 10 : '0');
-        num >>= 4;
-    }
-    return pbuf;
-}
-
-ALLOW_UNUSED
-static int dynld_vsnprintf(char* buf, unsigned long len, const char* fmt, va_list ap) {
+static int vfmt(char* buf, unsigned long len, const char* fmt, va_list ap) {
     unsigned i = 0;
 
 #define put(c)           \
@@ -116,10 +85,46 @@ static int dynld_vsnprintf(char* buf, unsigned long len, const char* fmt, va_lis
 }
 
 ALLOW_UNUSED
-static int dynld_snprintf(char* buf, unsigned long len, const char* fmt, ...) {
+static int fmt(char* buf, unsigned long len, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    int ret = dynld_vsnprintf(buf, len, fmt, ap);
+    int ret = vfmt(buf, len, fmt, ap);
     va_end(ap);
     return ret;
+}
+
+/// Internal Helper
+
+ALLOW_UNUSED
+static const char* num2dec(char* buf, unsigned long len, unsigned long long num) {
+    char* pbuf = buf + len - 1;
+    *pbuf = '\0';
+
+    if (num == 0) {
+        *(--pbuf) = '0';
+    }
+
+    while (num > 0 && pbuf != buf) {
+        char d = (num % 10) + '0';
+        *(--pbuf) = d;
+        num /= 10;
+    }
+    return pbuf;
+}
+
+ALLOW_UNUSED
+static const char* num2hex(char* buf, unsigned long len, unsigned long long num) {
+    char* pbuf = buf + len - 1;
+    *pbuf = '\0';
+
+    if (num == 0) {
+        *(--pbuf) = '0';
+    }
+
+    while (num > 0 && pbuf != buf) {
+        char d = (num & 0xf);
+        *(--pbuf) = d + (d > 9 ? 'a' - 10 : '0');
+        num >>= 4;
+    }
+    return pbuf;
 }
