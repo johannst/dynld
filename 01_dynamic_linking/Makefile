@@ -9,7 +9,7 @@ inspect: build
 
 build: libgreet.c main.c
 	gcc -o libgreet.so libgreet.c -shared -fPIC
-	gcc -o main main.c -lgreet -L. -Wl,--rpath=$(PWD)
+	gcc -o main main.c -lgreet -L. -Wl,--rpath=$(CURDIR)
 
 clean:
 	rm -f libgreet.so main
