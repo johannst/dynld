@@ -3,7 +3,7 @@
 #pragma once
 
 #if !defined(__linux__) || !defined(__x86_64__)
-# error "Only supported on linux(x86_64)!"
+#    error "Only supported on linux(x86_64)!"
 #endif
 
 // Inline ASM
@@ -46,8 +46,15 @@
 // Reference:
 //   syscall(2)
 
-#define argcast(A) ((long)(A))
-#define syscall3(n,a1,a2,a3) _syscall3(n, argcast(a1), argcast(a2), argcast(a3))
+#define argcast(A)              ((long)(A))
+#define syscall1(n, a1)         _syscall1(n, argcast(a1))
+#define syscall3(n, a1, a2, a3) _syscall3(n, argcast(a1), argcast(a2), argcast(a3))
+
+static inline long _syscall1(long n, long a1) {
+    long ret;
+    asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "memory");
+    return ret;
+}
 
 static inline long _syscall3(long n, long a1, long a2, long a3) {
     long ret;
