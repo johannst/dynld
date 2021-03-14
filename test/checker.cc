@@ -58,11 +58,11 @@ void check_exceed_len() {
 
 int main() {
     TEST_INIT;
-    TEST(check_dec);
-    TEST(check_hex);
-    TEST(check_ptr);
-    TEST(check_null);
-    TEST(check_exact_len);
-    TEST(check_exceed_len);
-    return TEST_FAIL_CNT;
+    TEST_ADD(check_dec);
+    TEST_ADD(check_hex);
+    TEST_ADD(check_ptr);
+    TEST_ADD(check_null);
+    TEST_ADD(check_exact_len);
+    TEST_ADD(check_exceed_len);
+    return TEST_RUN;
 }
