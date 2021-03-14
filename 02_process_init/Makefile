@@ -4,12 +4,12 @@ show: entry
 	./entry 1 2 3 4
 
 entry: entry.S entry.c
-	gcc -o $@                        \
-	    -g -O0                       \
-	    -Wall -Wextra                \
-	    -I ../include                \
-	    -nostartfiles -nodefaultlibs \
-	    -static                      \
+	gcc -o $@         \
+	    -g -O0        \
+	    -Wall -Wextra \
+	    -I ../include \
+	    -nostdlib     \
+	    -static       \
 	    $^
 
 clean:

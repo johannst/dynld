@@ -1,5 +1,6 @@
 // Copyright (c) 2020 Johannes Stoelp
 
+#include <auxv.h>
 #include <elf.h>
 #define MAX_PRINTF_LEN 128
 #include <io.h>
@@ -8,14 +9,14 @@
 #    error "Only supported in linux(x86_64)!"
 #endif
 
-void entry(const long* prctx) {
+void entry(const uint64_t* prctx) {
     // Interpret data on the stack passed by the OS kernel as specified in the
     // x86_64 SysV ABI.
-
-    long argc = *prctx;
+    uint64_t argc = *prctx;
     const char** argv = (const char**)(prctx + 1);
     const char** envv = (const char**)(argv + argc + 1);
 
+    // Count the number of environment variables in the `ENVP` segment.
     int envc = 0;
     for (const char** env = envv; *env; ++env) {
         ++envc;
@@ -26,14 +27,15 @@ void entry(const long* prctx) {
         auxv[i] = 0;
     }
 
-    const uint64_t* auxvp = (const uint64_t*)(envv + envc + 1);
-    for (unsigned i = 0; auxvp[i] != AT_NULL; i += 2) {
-        if (auxvp[i] < AT_MAX_CNT) {
-            auxv[auxvp[i]] = auxvp[i + 1];
+    // Read the `AUXV` auxiliary vector segment.
+    const Auxv64Entry* auxvp = (const Auxv64Entry*)(envv + envc + 1);
+    for (; auxvp->tag != AT_NULL; ++auxvp) {
+        if (auxvp->tag < AT_MAX_CNT) {
+            auxv[auxvp->tag] = auxvp->val;
         }
     }
 
-    // Print for demonstration
+    // Print the data provided by the Linux Kernel on the stack.
 
     pfmt("Got %d arg(s)\n", argc);
     for (const char** arg = argv; *arg; ++arg) {

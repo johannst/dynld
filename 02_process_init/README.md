@@ -1,27 +1,37 @@
 # Process Initialization
 
 ### Goals
-- Understand process state on process entry as specified by the
-  [SystemV x86-64 ABI][sysv_x86_64]
-- Build `no-std` program to visualize process state
+- Understand initial process state on process entry as specified by the
+  [SystemV x86-64 ABI][sysv_x86_64].
+- Build a `no-std` program to analyze & visualize the initial process state.
 
 ---
 
 Before starting to implement a minimal dynamic linker the first step is to
-understand the `process initialization` in further depth.
-Which is important because when starting a new process
-- the dynamic linker must setup the execution environment for the user program
-  (eg load dependencies, pass command line arguments)
-- the control is first passed to the dynamic linker (interpreter) by
-  the Linux Kernel as mentioned in
-  [01_dynamic_linking](../01_dynamic_linking/README.md)
-- the dynamic linker must be a stand-alone executable with no dependencies
+understand the `process initialization` procedure.
+This is important because when starting a `dynamically-linked`
+executable the control is first passed to the dynamic linker
+(interpreter) by the Linux Kernel as mentioned in
+[01_dynamic_linking](../01_dynamic_linking/README.md).
 
-Before transferring control to a new user process the Linux Kernel provides some
-data on the `stack` with the format following the specification in the
-[SystemV x86-64 ABI][sysv_x86_64] chapter _Initial Stack and Register State_.
+Once the dynamic linker is executing it needs to prepare the execution
+environment for the dynamically-linked executable. The dynamic linker's main tasks are:
+- To load dependencies.
+- Perform re-locations.
+- Run initialization routines.
+
+After the execution environment is prepared the dynamic linker hands
+control to the user executable.
+
+Due to all this requirements the dynamic must be a free-standing
+executable with no dependencies.
 
 ## Stack state on process entry
+
+When launching an ELF executable the Linux Kernel will map in the
+memory segments from the ELF file and setup some data on the `stack`
+according to the specification in the [SystemV x86-64 ABI][sysv_x86_64]
+chapter _Initial Stack and Register State_.
 
 On process startup after `execve(2)` the stack looks as follows
 ```text
@@ -59,23 +69,25 @@ ARGV | $rsp + 8              | const char* []         | Argument ptrs
 ARGC | $rsp                  | uint64_t               | Argument count
 ```
 
-Where `ARGV` is an array of pointers to strings holding the command line
-arguments passed to the user program and `ARGC` the number of arguments passed
-+1 as `ARGV[0]` holds the path of the program started. Similar `ENVP` is an
-array of pointers to strings holding the environment variables as seen by this
-process.
-The `AUXV` is the auxiliary vector and holds additional information as for
-example the `entry point` or the `program header` of the program. Entries in
-`AUXV` are encoded as given
-in `AuxvEntry`.
+- `ARGV : const char* []` is an array of pointers to string literals
+  holding the command line arguments.
+  - `ARGV[0]` is special as it holds the path of the launched program.
+- `ARGC : uint64_t` is the number of command line arguments + 1
+- `ENVP : const char* []` is an array of pointers to string literals
+  holding the environment variables as seen by this process
+- `AUXV : uint64_t[2]` is the `auxiliary vector` providing additional
+  information like the `entry point` or the `program header` of the
+  program.
+
+The `AUXV` segment consists of consecutive `AuxvEntry` elements terminated by the `DT_NULL` element.
 ```c
 struct AuxvEntry {
   uint64_t tag;
   uint64_t val;
 };
 ```
-The [`x86-64 System V ABI`][sysv_x86_64] chapter _Auxiliary Vector_ specifies
-the following tags
+The _Auxiliary Vector_ chapter in the [`x86-64 System V ABI`][sysv_x86_64] specifies
+the following tags:
 ```text
 AT_NULL   =  0
 AT_IGNORE =  1
@@ -107,7 +119,7 @@ below are in an unspecified state:
 - `$rdx`: function pointer that the application should register with
   `atexit(BA_OS)`.
 > Not sure here if clearing `$rbp` is strictly required as frame-pointer
-> chaining is optional and can be omitted (eg `gcc -fomit-frame-pointer`).
+> chaining is optional and can be omitted (`gcc -fomit-frame-pointer`).
 
 ## Hands-on the first instruction
 
@@ -133,7 +145,7 @@ This is because by default the `static linker` adds some extra code & libraries
 to the program like for example the `libc` and the `C-runtime (crt)` which
 contains the `_start` symbol and hence the first instruction executed.
 
-Passing `--trace` down to the `static linker` it sheds some light onto which
+Passing `--trace` down to the `static linker` sheds some light onto which
 input files the static linker actually processes.
 ```bash
 echo 'void main() {}' | gcc -x c -o /dev/null - -Wl,--trace
@@ -187,8 +199,8 @@ The full source code of the `_start` function is available in [entry.S](./entry.
 The pointer passed to the `entry` function can be used to compute `ARGC`,
 `ARGV` and `ENVP` accordingly.
 ```c
-void entry(long* prctx) {
-  long argc = *prctx;
+void entry(uint64_t* prctx) {
+  uint64_t argc = *prctx;
   const char** argv = (const char**)(prctx + 1);
   const char** envv = (const char**)(argv + argc + 1);
   ...
@@ -197,7 +209,7 @@ void entry(long* prctx) {
 To collect the `AUXV` entries we first need to count the number of environment
 variables as follows.
 ```c
-// entry
+// entry.c
   ...
   int envc = 0;
   for (const char** env = envv; *env; ++env) {
@@ -209,10 +221,10 @@ variables as follows.
       auxv[i] = 0;
   }
 
-  const uint64_t* auxvp = (const uint64_t*)(envv + envc + 1);
-  for (unsigned i = 0; auxvp[i] != AT_NULL; i += 2) {
-      if (auxvp[i] < AT_MAX_CNT) {
-          auxv[auxvp[i]] = auxvp[i + 1];
+  const Auxv64Entry* auxvp = (const Auxv64Entry*)(envv + envc + 1);
+  for (; auxvp->tag != AT_NULL; ++auxvp) {
+      if (auxvp->tag < AT_MAX_CNT) {
+          auxv[auxvp->tag] = auxvp->val;
       }
   }
   ...
@@ -220,7 +232,7 @@ variables as follows.
 
 Finally the data can be printed as
 ```c
-// entry
+// entry.c
   ...
   pfmt("Got %d arg(s)\n", argc);
   for (const char** arg = argv; *arg; ++arg) {
@@ -268,7 +280,7 @@ Print first 9 env var(s)
         env = GDM_LANG=en_US.utf8
         env = PWD=/home/johannst/dev/dynld/02_process_init
         env = MAIL=/var/spool/mail/johannst
-        env = XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session  env = LANG=en_US.utf8
+        env = XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session
 Print auxiliary vector
         AT_EXECFD: 0
         AT_PHDR  : 0x400040
@@ -287,9 +299,9 @@ Print auxiliary vector
 
 ## Things to remember
 - On process entry the Linux Kernel provides data on the stack as specified in
-  the [SystemV ABI][sysv_x86_64]
+  the [SystemV ABI][sysv_x86_64].
 - By default the `static linker` adds additional code which contains the
-  `_start` symbol being the default process `entry point`
+  `_start` symbol being the default process `entry point`.
 
 ## References & Source Code
 - [x86-64 SystemV ABI][sysv_x86_64]

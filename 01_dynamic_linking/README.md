@@ -26,9 +26,9 @@ control to the interpreter rather than the user program.
 The interpreter will prepare the execution environment for the user program
 and pass control to it afterwards.
 Typical tasks of the interpreter are:
-- loading shared objects into memory
-- performing re-location
-- running initialization routines
+- Loading shared objects into memory (dependencies).
+- Performing re-location.
+- Running initialization routines.
 ```text
                                 @vm                      @vm
                                |        |               |          |
