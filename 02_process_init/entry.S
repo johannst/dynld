@@ -2,6 +2,10 @@
 
 #include <asm/unistd.h>
 
+#if !defined(__linux__) || !defined(__x86_64__)
+#    error "Only supported in linux(x86_64)!"
+#endif
+
 .intel_syntax noprefix
 
 .section .text, "ax", @progbits
