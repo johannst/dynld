@@ -2,7 +2,6 @@
 
 #include <auxv.h>
 #include <elf.h>
-#define MAX_PRINTF_LEN 128
 #include <io.h>
 
 #if !defined(__linux__) || !defined(__x86_64__)

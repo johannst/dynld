@@ -2,8 +2,9 @@
 
 #include "test_helper.h"
 
-#include <cstdio>
-#include <fmt.h>
+extern "C" {
+    #include <fmt.h>
+}
 
 void check_dec() {
     char have[16];

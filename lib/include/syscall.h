@@ -28,7 +28,7 @@
 //    machine specific constraint.
 //    ```c
 //    register long r12 asm ("r12") = 42;
-//    asm("nop" : : "r"(r10));
+//    asm("nop" : : "r"(r12));
 //    ```
 //
 // Reference:
