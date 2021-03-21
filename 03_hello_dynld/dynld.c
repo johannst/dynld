@@ -2,6 +2,7 @@
 
 #include <syscall.h>
 #include <auxv.h>
+#include <common.h>
 #include <io.h>
 
 #include <stdint.h>
@@ -63,15 +64,10 @@ void dl_entry(const uint64_t* prctx) {
     //   program. When this happens the `AT_PHDR` entry tells the
     //   interpreter where to find the program header table in the
     //   memory image.
-    if (auxv[AT_PHDR] == 0 || auxv[AT_EXECFD] != 0) {
-        pfmt("[dynld]: ERROR, expected Linux Kernel to map user executable!\n");
-        syscall1(__NR_exit, 1);
-    }
+    ERROR_ON(auxv[AT_PHDR] == 0 || auxv[AT_EXECFD] != 0, "[dynld]: ERROR, expected Linux Kernel to map user executable!\n");
 
-    if (auxv[AT_ENTRY] == 0) {
-        pfmt("[dynld]: ERROR, AT_ENTRY not found in auxiliary vector!\n");
-        syscall1(__NR_exit, 1);
-    }
+    // Entrypoint must be defined.
+    ERROR_ON(auxv[AT_ENTRY] == 0, "[dynld]: ERROR, AT_ENTRY not found in auxiliary vector!\n");
 
     // Transfer control to user executable.
     void (*user_entry)() = (void (*)())auxv[AT_ENTRY];
