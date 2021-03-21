@@ -3,3 +3,4 @@
 #pragma once
 
 int pfmt(const char* fmt, ...);
+int efmt(const char* fmt, ...);

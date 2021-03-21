@@ -16,22 +16,34 @@
 #define FD_STDOUT 1
 #define FD_STDERR 2
 
-int pfmt(const char* fmt, ...) {
+static int vdfmt(int fd, const char* fmt, va_list ap) {
     char buf[MAX_PRINTF_LEN];
-
-    va_list ap;
-    va_start(ap, fmt);
     int ret = vfmt(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
 
     if (ret > MAX_PRINTF_LEN - 1) {
-        syscall3(__NR_write, FD_STDERR, buf, MAX_PRINTF_LEN - 1);
+        syscall3(__NR_write, fd, buf, MAX_PRINTF_LEN - 1);
 
         static const char warn[] = "\npfmt: Message truncated, max length can be configured by defining MAX_PRINTF_LEN\n";
-        syscall3(__NR_write, FD_STDOUT, warn, sizeof(warn));
+        syscall3(__NR_write, FD_STDERR, warn, sizeof(warn));
         return MAX_PRINTF_LEN - 1;
     }
 
-    syscall3(__NR_write, FD_STDOUT, buf, ret);
+    syscall3(__NR_write, fd, buf, ret);
+    return ret;
+}
+
+int pfmt(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int ret = vdfmt(FD_STDOUT, fmt, ap);
+    va_end(ap);
+    return ret;
+}
+
+int efmt(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int ret = vdfmt(FD_STDERR, fmt, ap);
+    va_end(ap);
     return ret;
 }
