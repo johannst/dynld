@@ -35,29 +35,44 @@
 //   https://gcc.gnu.org/onlinedocs/gcc/Extended-Asm.html
 //   https://gcc.gnu.org/onlinedocs/gcc/Machine-Constraints.html#Machine-Constraints
 //   https://gcc.gnu.org/onlinedocs/gcc/Local-Register-Variables.html
-
-// Linux syscall ABI
-//  x86-64
-//    #syscall: rax
-//    ret     : rax
-//    instr   : syscall
-//    args    : rdi   rsi   rdx   r10   r8    r9
+//
+//
+// Linux syscall ABI - x86-64
+//   #syscall: rax
+//   ret     : rax
+//   instr   : syscall
+//   args    : rdi   rsi   rdx   r10   r8    r9
 //
 // Reference:
 //   syscall(2)
+//
+//
+// X86_64 `syscall` instruction additionally clobbers following registers:
+//   rcx   Store return address.
+//   r11   Store RFLAGS.
+//
+// Reference:
+//   https://www.felixcloutier.com/x86/syscall
 
 #define argcast(A)              ((long)(A))
 #define syscall1(n, a1)         _syscall1(n, argcast(a1))
+#define syscall2(n, a1, a2)     _syscall2(n, argcast(a1), argcast(a2))
 #define syscall3(n, a1, a2, a3) _syscall3(n, argcast(a1), argcast(a2), argcast(a3))
 
 static inline long _syscall1(long n, long a1) {
     long ret;
-    asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "memory");
+    asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long _syscall2(long n, long a1, long a2) {
+    long ret;
+    asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2) : "rcx", "r11", "memory");
     return ret;
 }
 
 static inline long _syscall3(long n, long a1, long a2, long a3) {
     long ret;
-    asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3) : "memory");
+    asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3) : "rcx", "r11", "memory");
     return ret;
 }

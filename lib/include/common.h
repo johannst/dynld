@@ -3,14 +3,12 @@
 #pragma once
 
 #include "io.h"
-#include "syscall.h"
+#include "syscalls.h"
 
-#include <asm/unistd.h>
-
-#define ERROR_ON(cond, ...)         \
-    do {                            \
-        if ((cond)) {               \
-            efmt(__VA_ARGS__);      \
-            syscall1(__NR_exit, 1); \
-        }                           \
+#define ERROR_ON(cond, fmt, ...)                                               \
+    do {                                                                       \
+        if ((cond)) {                                                          \
+            efmt("%s:%d " fmt, __FILE__, __LINE__ __VA_OPT__(, ) __VA_ARGS__); \
+            _exit(1);                                                          \
+        }                                                                      \
     } while (0)

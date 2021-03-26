@@ -15,7 +15,7 @@
 #define AT_EXECFD  2  /* [val] File descriptor of user program (in case Linux Kernel didn't mapped) */
 #define AT_PHDR    3  /* [ptr] Address of Phdr of use program (in case Kernel mapped user program) */
 #define AT_PHENT   4  /* [val] Size in bytes of one Phdr entry */
-#define AT_PHNUM   5  /* [val] Number of Phread entries */
+#define AT_PHNUM   5  /* [val] Number of Phdr entries */
 #define AT_PAGESZ  6  /* [val] System page size */
 #define AT_BASE    7  /* [ptr] `base address` interpreter was loaded to */
 #define AT_FLAGS   8  /* [val] */
