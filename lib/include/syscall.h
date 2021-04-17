@@ -19,6 +19,7 @@
 //
 //   Machine specific constraints (x86_64):
 //     a  | a register (eg rax)
+//     c  | c register (eg rcx)
 //     d  | d register (eg rdx)
 //     D  | di register (eg rdi)
 //     S  | si register (eg rsi)
@@ -54,10 +55,12 @@
 // Reference:
 //   https://www.felixcloutier.com/x86/syscall
 
-#define argcast(A)              ((long)(A))
-#define syscall1(n, a1)         _syscall1(n, argcast(a1))
-#define syscall2(n, a1, a2)     _syscall2(n, argcast(a1), argcast(a2))
-#define syscall3(n, a1, a2, a3) _syscall3(n, argcast(a1), argcast(a2), argcast(a3))
+#define argcast(A)                          ((long)(A))
+#define syscall1(n, a1)                     _syscall1(n, argcast(a1))
+#define syscall2(n, a1, a2)                 _syscall2(n, argcast(a1), argcast(a2))
+#define syscall3(n, a1, a2, a3)             _syscall3(n, argcast(a1), argcast(a2), argcast(a3))
+#define syscall4(n, a1, a2, a3, a4)         _syscall4(n, argcast(a1), argcast(a2), argcast(a3), argcast(a4))
+#define syscall6(n, a1, a2, a3, a4, a5, a6) _syscall6(n, argcast(a1), argcast(a2), argcast(a3), argcast(a4), argcast(a5), argcast(a6))
 
 static inline long _syscall1(long n, long a1) {
     long ret;
@@ -74,5 +77,21 @@ static inline long _syscall2(long n, long a1, long a2) {
 static inline long _syscall3(long n, long a1, long a2, long a3) {
     long ret;
     asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3) : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long _syscall4(long n, long a1, long a2, long a3, long a4) {
+    long ret;
+    register long r10 asm("r10") = a4;
+    asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r10) : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long _syscall6(long n, long a1, long a2, long a3, long a4, long a5, long a6) {
+    long ret;
+    register long r10 asm("r10") = a4;
+    register long r8 asm("r8") = a5;
+    register long r9 asm("r9") = a6;
+    asm volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
     return ret;
 }
