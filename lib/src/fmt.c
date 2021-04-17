@@ -11,7 +11,7 @@ static const char* num2dec(char* buf, unsigned long len, unsigned long long num)
     }
 
     while (num > 0 && pbuf != buf) {
-      char d = (char)(num % 10) + '0';
+        char d = (char)(num % 10) + '0';
         *(--pbuf) = d;
         num /= 10;
     }
@@ -80,6 +80,10 @@ int vfmt(char* buf, unsigned long len, const char* fmt, va_list ap) {
                 unsigned long val = l_cnt > 0 ? va_arg(ap, unsigned long) : va_arg(ap, unsigned);
                 const char* ptr = num2hex(scratch, sizeof(scratch), val);
                 puts(ptr);
+            } break;
+            case 'c': {
+                char c = va_arg(ap, int);  // By C standard, value passed to varg smaller than `sizeof(int)` will be converted to int.
+                put(c);
             } break;
             case 's': {
                 const char* ptr = va_arg(ap, const char*);
