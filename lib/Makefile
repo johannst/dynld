@@ -9,6 +9,7 @@ HDR+=include/syscall.h
 HDR+=include/syscalls.h
 
 DEP+=src/alloc.o
+DEP+=src/common.o
 DEP+=src/fmt.o
 DEP+=src/io.o
 DEP+=src/syscalls.o
