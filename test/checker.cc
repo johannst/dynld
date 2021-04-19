@@ -15,12 +15,39 @@ void check_dec() {
     ASSERT_EQ('\0', have[len]);
 }
 
+void check_dec_long() {
+    char have[32];
+    int len = fmt(have, sizeof(have), "%ld %d", 8589934592 /* 2^33 */, 8589934592 /* 2^33 */);
+
+    ASSERT_EQ("8589934592 0", have);
+    ASSERT_EQ(12, len);
+    ASSERT_EQ('\0', have[len]);
+}
+
 void check_hex() {
     char have[16];
     int len = fmt(have, sizeof(have), "%x %x", 0xdeadbeef, 0xcafe);
 
     ASSERT_EQ("deadbeef cafe", have);
     ASSERT_EQ(13, len);
+    ASSERT_EQ('\0', have[len]);
+}
+
+void check_hex_long() {
+    char have[32];
+    int len = fmt(have, sizeof(have), "%lx %x", 0x1111222233334444, 0x1111222233334444);
+
+    ASSERT_EQ("1111222233334444 33334444", have);
+    ASSERT_EQ(25, len);
+    ASSERT_EQ('\0', have[len]);
+}
+
+void check_char() {
+    char have[4];
+    int len = fmt(have, sizeof(have), "%c%c%c", 'A', 'a', '\x01' /* non printable */);
+
+    ASSERT_EQ("Aa\x01", have);
+    ASSERT_EQ(3, len);
     ASSERT_EQ('\0', have[len]);
 }
 
@@ -60,7 +87,10 @@ void check_exceed_len() {
 int main() {
     TEST_INIT;
     TEST_ADD(check_dec);
+    TEST_ADD(check_dec_long);
     TEST_ADD(check_hex);
+    TEST_ADD(check_hex_long);
+    TEST_ADD(check_char);
     TEST_ADD(check_ptr);
     TEST_ADD(check_null);
     TEST_ADD(check_exact_len);

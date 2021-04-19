@@ -51,7 +51,7 @@ int vfmt(char* buf, unsigned long len, const char* fmt, va_list ap) {
         put(*s++); \
     }
 
-    char scratch[16];
+    char scratch[32];
     int l_cnt = 0;
 
     while (*fmt) {
