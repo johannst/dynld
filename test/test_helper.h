@@ -28,11 +28,6 @@ void ASSERT_EQ(T1 expected, T2 have) {
     }
 }
 
-template<typename T1, typename T2>
-void ASSERT_EQ(T1* expected, T2* have) {
-    ASSERT_EQ(*expected, *have);
-}
-
 // Char string based ASSERT_* helper.
 
 template<>

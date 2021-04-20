@@ -3,7 +3,8 @@
 #include "test_helper.h"
 
 extern "C" {
-    #include <fmt.h>
+#include <common.h>
+#include <fmt.h>
 }
 
 void check_dec() {
@@ -84,6 +85,27 @@ void check_exceed_len() {
     ASSERT_EQ('\0', have[7]);
 }
 
+void check_memset() {
+    unsigned char d[7] = {0};
+    void* ret = memset(d, '\x42', sizeof(d));
+
+    ASSERT_EQ(ret, d);
+    for (unsigned i = 0; i < sizeof(d); ++i) {
+        ASSERT_EQ(0x42, d[i]);
+    }
+}
+
+void check_memcpy() {
+    unsigned char s[5] = {5, 4, 3, 2, 1};
+    unsigned char d[5] = {0};
+    void* ret = memcpy(d, s, sizeof(d));
+
+    ASSERT_EQ(ret, d);
+    for (unsigned i = 0; i < sizeof(d); ++i) {
+        ASSERT_EQ(5-i, d[i]);
+    }
+}
+
 int main() {
     TEST_INIT;
     TEST_ADD(check_dec);
@@ -95,5 +117,7 @@ int main() {
     TEST_ADD(check_null);
     TEST_ADD(check_exact_len);
     TEST_ADD(check_exceed_len);
+    TEST_ADD(check_memset);
+    TEST_ADD(check_memcpy);
     return TEST_RUN;
 }
