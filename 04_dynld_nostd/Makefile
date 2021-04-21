@@ -16,12 +16,6 @@ main: dynld.so main.c ../lib/libcommon.a
 	    -Wl,--hash-style=sysv \
 	    libgreet.c
 
-	@if readelf -W -S libgreet.so | grep plt >& /dev/null; then \
-		echo "ERROR: libgreet.so contains PLT while we don't support relocation calls in libgreet.so!"; \
-		echo "       All function calls in libgreet.so must be statically resolved!"; \
-		exit 1; \
-	fi
-
 	@# For now ew only add support for ELF hash tables (DT_HASH).
 	@# Therefore we specify the `hash-style` below.
 	gcc -o $@                                   \

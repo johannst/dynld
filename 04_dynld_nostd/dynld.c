@@ -105,7 +105,7 @@ void decode_dynamic(Dso* dso, uint64_t dynoff) {
     ERROR_ON(dso->dynamic[DT_HASH] == 0, "DT_HASH missing in dynamic section!");
 }
 
-Dso get_prog_info(const ExecInfo* info) {
+Dso get_prog_dso(const ExecInfo* info) {
     Dso prog = {0};
 
     // Determine the base address of the user program.
@@ -194,9 +194,14 @@ const Elf64Sym* get_sym(const Dso* dso, const uint64_t idx) {
     return (const Elf64Sym*)(dso->base + dso->dynamic[DT_SYMTAB]) + idx;
 }
 
-const Elf64Rela* get_pltreloc(const Dso* dso, const uint64_t idx) {
+const Elf64Rela* get_pltreloca(const Dso* dso, const uint64_t idx) {
     ERROR_ON(dso->dynamic[DT_PLTRELSZ] < sizeof(Elf64Rela) * idx, "PLT relocation table indexed out-of-bounds!");
     return (const Elf64Rela*)(dso->base + dso->dynamic[DT_JMPREL]) + idx;
+}
+
+const Elf64Rela* get_reloca(const Dso* dso, const uint64_t idx) {
+    ERROR_ON(dso->dynamic[DT_RELASZ] < sizeof(Elf64Rela) * idx, "RELA relocation table indexed out-of-bounds!");
+    return (const Elf64Rela*)(dso->base + dso->dynamic[DT_RELA]) + idx;
 }
 
 
@@ -212,17 +217,26 @@ int strcmp(const char* s1, const char* s2) {
     return *(unsigned char*)s1 - *(unsigned char*)s2;
 }
 
-void* lookup_sym(const Dso* dso, const char* sym_name) {
+// Perform naive lookup for global symbol and return address if symbol was found.
+//
+// For simplicity this lookup doesn't use the hash table (`DT_HASH` |
+// `DT_GNU_HASH`) but rather iterates of the dynamic symbol table. Using the
+// hash table doesn't change the lookup result, however it yields better
+// performance for large symbol tables.
+//
+// `dso`          A handle to the dso which dynamic symbol table should be searched.
+// `sym_name`     Name of the symbol to look up.
+// `sym_type`     Type of the symbol to look up (STT_OBJECT | STT_FUNC).
+void* lookup_sym(const Dso* dso, const char* sym_name, unsigned sym_type) {
     for (unsigned i = 0; i < get_num_dynsyms(dso); ++i) {
         const Elf64Sym* sym = get_sym(dso, i);
 
-        if (ELF64_ST_TYPE(sym->info) == STT_FUNC && ELF64_ST_BIND(sym->info) == STB_GLOBAL && sym->shndx != SHN_UNDEF) {
+        if (ELF64_ST_TYPE(sym->info) == sym_type && ELF64_ST_BIND(sym->info) == STB_GLOBAL && sym->shndx != SHN_UNDEF) {
             if (strcmp(sym_name, get_str(dso, sym->name)) == 0) {
                 return dso->base + sym->value;
             }
         }
     }
-
     return 0;
 }
 
@@ -324,7 +338,7 @@ Dso map_dependency(const char* dependency) {
         //
         // This is typically used by the `.bss` section.
         if (p->memsz > p->filesz) {
-            memset(base + addr_start + p->filesz, 0 /* byte */, p->memsz - p->filesz /*len*/);
+            memset(base + p->vaddr + p->filesz, 0 /* byte */, p->memsz - p->filesz /*len*/);
         }
     }
 
@@ -338,34 +352,74 @@ Dso map_dependency(const char* dependency) {
 }
 
 
-/// ------------------------------
-/// Dynamic Linking (lazy resolve)
-/// ------------------------------
+/// -------------------
+/// Resolve relocations
+/// -------------------
 
 struct LinkMap {
     const Dso* dso;              // Pointer to Dso list object.
-    const struct LinkMap* next;  // Pointer to next LinkMap entry.
+    const struct LinkMap* next;  // Pointer to next LinkMap entry ('0' terminates the list).
 };
 typedef struct LinkMap LinkMap;
 
-void resolve_relocs(const Dso* dso, const LinkMap* map) {
+// Resolve a single relocation of `dso`.
+//
+// Resolve the relocation `reloc` by looking up the address of the symbol
+// referenced by the relocation. If the address of the symbol was found the
+// relocation is patched, if the address was not found the process exits.
+static void resolve_reloc(const Dso* dso, const LinkMap* map, const Elf64Rela* reloc, unsigned symtype) {
+    // Get symbol referenced by relocation.
+    const int symidx = ELF64_R_SYM(reloc->info);
+    const Elf64Sym* sym = get_sym(dso, symidx);
+    const char* symname = get_str(dso, sym->name);
+
+    // Get relocation typy.
+    unsigned reloctype = ELF64_R_TYPE(reloc->info);
+
+    // Lookup symbol address.
+    void* symaddr = 0;
+    // TODO: Explain special handling of R_X86_64_COPY.
+    for (const LinkMap* lmap = (reloctype == R_X86_64_COPY ? map->next : map); lmap && symaddr == 0; lmap = lmap->next) {
+        symaddr = lookup_sym(lmap->dso, symname, symtype);
+    }
+    ERROR_ON(symaddr == 0, "Failed lookup symbol %s while resolving relocations!", symname);
+
+    pfmt("Resolved reloc %s to %p (base %p)\n", symname, symaddr, dso->base);
+
+    // Perform relocation according to relocation type.
+    switch (reloctype) {
+        case R_X86_64_GLOB_DAT:  /* GOT entry for data objects. */
+        case R_X86_64_JUMP_SLOT: /* PLT entry. */
+            // Patch storage unit of relocation with absolute address of the symbol.
+            *(uint64_t*)(dso->base + reloc->offset) = (uint64_t)symaddr;
+            break;
+        case R_X86_64_COPY: /* Reference to global variable in shared ELF file. */
+            // Copy initial value of variable into relocation address.
+            memcpy(dso->base + reloc->offset, (void*)symaddr, sym->size);
+            break;
+        default:
+            ERROR_ON(true, "Unsupported relocation type %d!\n", reloctype);
+    }
+}
+
+// Resolve all relocations of `dso`.
+//
+// Resolve relocations from the PLT & RELA tables. Use `map` as link map which
+// defines the order of the symbol lookup.
+static void resolve_relocs(const Dso* dso, const LinkMap* map) {
+    // Resolve all relocation from the RELA table found in `dso`. There is
+    // typically one relocation per undefined dynamic object symbol (eg global
+    // variables).
+    for (unsigned long relocidx = 0; relocidx < (dso->dynamic[DT_RELASZ] / sizeof(Elf64Rela)); ++relocidx) {
+        const Elf64Rela* reloc = get_reloca(dso, relocidx);
+        resolve_reloc(dso, map, reloc, STT_OBJECT);
+    }
+
+    // Resolve all relocation from the PLT jump table found in `dso`. There is
+    // typically one relocation per undefined dynamic function symbol.
     for (unsigned long relocidx = 0; relocidx < (dso->dynamic[DT_PLTRELSZ] / sizeof(Elf64Rela)); ++relocidx) {
-        const Elf64Rela* reloc = get_pltreloc(dso, relocidx);
-        ERROR_ON(ELF64_R_TYPE(reloc->info) != R_X86_64_JUMP_SLOT, "Expected relocation entry of type X86_64_JUMP_SLOT!");
-
-        const int symidx = ELF64_R_SYM(reloc->info);
-        const char* symname = get_str(dso, get_sym(dso, symidx)->name);
-
-        void* symaddr = 0;
-        for (const LinkMap* lmap = map; lmap && symaddr == 0; lmap = lmap->next) {
-            symaddr = lookup_sym(lmap->dso, symname);
-        }
-        ERROR_ON(symaddr == 0, "Failed lookup symbol %s while resolving relocations!", symname);
-
-        pfmt("Resolved reloc %s to %p\n", symname, symaddr);
-
-        // Patch storage unit of relocation with absolute address of the symbol.
-        *(uint64_t*)(dso->base + reloc->offset) = (uint64_t)symaddr;
+        const Elf64Rela* reloc = get_pltreloca(dso, relocidx);
+        resolve_reloc(dso, map, reloc, STT_FUNC);
     }
 }
 
@@ -408,7 +462,7 @@ void dl_entry(const uint64_t* prctx) {
 
     // Initialize dso handle for user program but extracting necesarry
     // information from `AUXV` and the `PHDR`.
-    const Dso dso_prog = get_prog_info(&exec_info);
+    const Dso dso_prog = get_prog_dso(&exec_info);
 
     // Map dependency.
     //
@@ -430,9 +484,11 @@ void dl_entry(const uint64_t* prctx) {
     const LinkMap map_lib = {.dso = &dso_lib, .next = 0};
     const LinkMap map_prog = {.dso = &dso_prog, .next = &map_lib};
 
-    // Resolve relocations for the main program.
-    resolve_relocs(&dso_prog, &map_prog);
+    // Resolve relocations of the library (dependency).
+    resolve_relocs(&dso_lib, &map_prog);
 
+    // Resolve relocations of the main program.
+    resolve_relocs(&dso_prog, &map_prog);
 
     // Install dynamic resolve handler.
     //
@@ -458,6 +514,7 @@ void dl_entry(const uint64_t* prctx) {
     // GOT[1];  // Pushed by PLT0 pad on stack before jumping to got[2] -> Word the dynamic linker can use to identify the caller.
     // GOT[2];  // Jump target for PLT0 pad (when doing lazy resolving).
 
+    // Transfer control to user program.
     dso_prog.entry();
 
     _exit(0);

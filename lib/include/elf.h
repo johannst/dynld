@@ -141,11 +141,12 @@ typedef struct {
 
 // Symbol Types.
 #define STT_NOTYPE 0 /* No type. */
+#define STT_OBJECT 1 /* Data Object. */
 #define STT_FUNC   2 /* Function entry point. */
 
 // Special Section Indicies.
-#define SHN_UNDEF 0  /* Undefined section. */
-#define SHN_ABS 0xff1 /* Indicates an absolute value. */
+#define SHN_UNDEF 0     /* Undefined section. */
+#define SHN_ABS   0xff1 /* Indicates an absolute value. */
 
 /// -----------------
 /// Relocations Entry
@@ -166,4 +167,6 @@ typedef struct {
 #define ELF64_R_TYPE(i) ((i)&0xffffffffL)
 
 // x86_64 relocation types.
+#define R_X86_64_COPY      5 /* Copy content from sym addr to relocation address */
+#define R_X86_64_GLOB_DAT  6 /* Address affected by relocation: `offset` (+ base) */
 #define R_X86_64_JUMP_SLOT 7 /* Address affected by relocation: `offset` (+ base) */
