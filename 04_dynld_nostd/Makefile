@@ -7,15 +7,7 @@ COMMON_CFLAGS := -g -O0 -Wall -Wextra \
 run: main
 	./$<
 
-main: dynld.so main.c ../lib/libcommon.a
-	@# For now ew only add support for ELF hash tables (DT_HASH).
-	@# Therefore we specify the `hash-style` below.
-	gcc -o libgreet.so        \
-	    $(COMMON_CFLAGS)      \
-	    -fPIC -shared         \
-	    -Wl,--hash-style=sysv \
-	    libgreet.c
-
+main: dynld.so libgreet.so main.c ../lib/libcommon.a
 	@# For now ew only add support for ELF hash tables (DT_HASH).
 	@# Therefore we specify the `hash-style` below.
 	gcc -o $@                                   \
@@ -30,6 +22,15 @@ main: dynld.so main.c ../lib/libcommon.a
 	readelf -W --program-headers $@
 	objdump --disassemble -j .plt -M intel $@
 	objdump --disassemble=_start -M intel $@
+
+libgreet.so: libgreet.c
+	@# For now ew only add support for ELF hash tables (DT_HASH).
+	@# Therefore we specify the `hash-style` below.
+	gcc -o $@                 \
+	    $(COMMON_CFLAGS)      \
+	    -fPIC -shared         \
+	    -Wl,--hash-style=sysv \
+	    $^
 
 dynld.so: dynld.S dynld.c ../lib/libcommon.a
 	gcc -o $@                          \
