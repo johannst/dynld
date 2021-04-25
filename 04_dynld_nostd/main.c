@@ -17,6 +17,4 @@ void _start() {
 
     // Reference global variable from libgreet.so -> generates RELA relocation.
     pfmt("libgreet.so called %d times\n", gCalled);
-
-    _exit(0);
 }
