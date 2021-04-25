@@ -205,6 +205,41 @@ const Elf64Rela* get_reloca(const Dso* dso, const uint64_t idx) {
 }
 
 
+/// -----------
+/// Init & Fini
+/// -----------
+
+typedef void (*initfptr)();
+
+static void init(const Dso* dso) {
+    if (dso->dynamic[DT_INIT]) {
+        initfptr* fn = (initfptr*)(dso->base + dso->dynamic[DT_INIT]);
+        (*fn)();
+    }
+
+    size_t nfns = dso->dynamic[DT_INIT_ARRAYSZ] / sizeof(initfptr);
+    initfptr* fns = (initfptr*)(dso->base + dso->dynamic[DT_INIT_ARRAY]);
+    while (nfns--) {
+        (*fns++)();
+    }
+}
+
+typedef void (*finifptr)();
+
+static void fini(const Dso* dso) {
+    size_t nfns = dso->dynamic[DT_FINI_ARRAYSZ] / sizeof(finifptr);
+    finifptr* fns = (finifptr*)(dso->base + dso->dynamic[DT_FINI_ARRAY]) + nfns /* reverse destruction order */;
+    while (nfns--) {
+        (*--fns)();
+    }
+
+    if (dso->dynamic[DT_FINI]) {
+        finifptr* fn = (finifptr*)(dso->base + dso->dynamic[DT_FINI]);
+        (*fn)();
+    }
+}
+
+
 /// -------------
 /// Symbol lookup
 /// -------------
@@ -226,12 +261,12 @@ int strcmp(const char* s1, const char* s2) {
 //
 // `dso`          A handle to the dso which dynamic symbol table should be searched.
 // `sym_name`     Name of the symbol to look up.
-// `sym_type`     Type of the symbol to look up (STT_OBJECT | STT_FUNC).
-void* lookup_sym(const Dso* dso, const char* sym_name, unsigned sym_type) {
+void* lookup_sym(const Dso* dso, const char* sym_name) {
     for (unsigned i = 0; i < get_num_dynsyms(dso); ++i) {
         const Elf64Sym* sym = get_sym(dso, i);
 
-        if (ELF64_ST_TYPE(sym->info) == sym_type && ELF64_ST_BIND(sym->info) == STB_GLOBAL && sym->shndx != SHN_UNDEF) {
+        if ((ELF64_ST_TYPE(sym->info) == STT_OBJECT || ELF64_ST_TYPE(sym->info) == STT_FUNC) && ELF64_ST_BIND(sym->info) == STB_GLOBAL &&
+            sym->shndx != SHN_UNDEF) {
             if (strcmp(sym_name, get_str(dso, sym->name)) == 0) {
                 return dso->base + sym->value;
             }
@@ -367,7 +402,7 @@ typedef struct LinkMap LinkMap;
 // Resolve the relocation `reloc` by looking up the address of the symbol
 // referenced by the relocation. If the address of the symbol was found the
 // relocation is patched, if the address was not found the process exits.
-static void resolve_reloc(const Dso* dso, const LinkMap* map, const Elf64Rela* reloc, unsigned symtype) {
+static void resolve_reloc(const Dso* dso, const LinkMap* map, const Elf64Rela* reloc) {
     // Get symbol referenced by relocation.
     const int symidx = ELF64_R_SYM(reloc->info);
     const Elf64Sym* sym = get_sym(dso, symidx);
@@ -376,20 +411,28 @@ static void resolve_reloc(const Dso* dso, const LinkMap* map, const Elf64Rela* r
     // Get relocation typy.
     unsigned reloctype = ELF64_R_TYPE(reloc->info);
 
-    // Lookup symbol address.
+    // Find symbol address.
     void* symaddr = 0;
-    // TODO: Explain special handling of R_X86_64_COPY.
-    for (const LinkMap* lmap = (reloctype == R_X86_64_COPY ? map->next : map); lmap && symaddr == 0; lmap = lmap->next) {
-        symaddr = lookup_sym(lmap->dso, symname, symtype);
+    // FIXME: Should relocations of type `R_X86_64_64` only be looked up in `dso` directly?
+    if (reloctype == R_X86_64_RELATIVE) {
+        // Symbols address is computed by re-basing the relative address based on the DSOs base address.
+        symaddr = (void*)(dso->base + reloc->addend);
+    } else {
+        // TODO: Explain special handling of R_X86_64_COPY.
+        for (const LinkMap* lmap = (reloctype == R_X86_64_COPY ? map->next : map); lmap && symaddr == 0; lmap = lmap->next) {
+            symaddr = lookup_sym(lmap->dso, symname);
+        }
     }
     ERROR_ON(symaddr == 0, "Failed lookup symbol %s while resolving relocations!", symname);
 
-    pfmt("Resolved reloc %s to %p (base %p)\n", symname, symaddr, dso->base);
+    pfmt("Resolved reloc %s to %p (base %p)\n", reloctype == R_X86_64_RELATIVE ? "<relative>" : symname, symaddr, dso->base);
 
     // Perform relocation according to relocation type.
     switch (reloctype) {
         case R_X86_64_GLOB_DAT:  /* GOT entry for data objects. */
         case R_X86_64_JUMP_SLOT: /* PLT entry. */
+        case R_X86_64_64:        /* 64bit relocation (non-lazy). */
+        case R_X86_64_RELATIVE:  /* DSO base relative relocation. */
             // Patch storage unit of relocation with absolute address of the symbol.
             *(uint64_t*)(dso->base + reloc->offset) = (uint64_t)symaddr;
             break;
@@ -412,14 +455,14 @@ static void resolve_relocs(const Dso* dso, const LinkMap* map) {
     // variables).
     for (unsigned long relocidx = 0; relocidx < (dso->dynamic[DT_RELASZ] / sizeof(Elf64Rela)); ++relocidx) {
         const Elf64Rela* reloc = get_reloca(dso, relocidx);
-        resolve_reloc(dso, map, reloc, STT_OBJECT);
+        resolve_reloc(dso, map, reloc);
     }
 
     // Resolve all relocation from the PLT jump table found in `dso`. There is
     // typically one relocation per undefined dynamic function symbol.
     for (unsigned long relocidx = 0; relocidx < (dso->dynamic[DT_PLTRELSZ] / sizeof(Elf64Rela)); ++relocidx) {
         const Elf64Rela* reloc = get_pltreloca(dso, relocidx);
-        resolve_reloc(dso, map, reloc, STT_FUNC);
+        resolve_reloc(dso, map, reloc);
     }
 }
 
@@ -486,11 +529,15 @@ void dl_entry(const uint64_t* prctx) {
 
     // Resolve relocations of the library (dependency).
     resolve_relocs(&dso_lib, &map_prog);
-
     // Resolve relocations of the main program.
     resolve_relocs(&dso_prog, &map_prog);
 
-    // Install dynamic resolve handler.
+    // Initialize library.
+    init(&dso_lib);
+    // Initialize main program.
+    init(&dso_prog);
+
+    // Install dynamic resolve handler (lazy resolve).
     //
     // The dynamic resolve handler is used when binding symbols lazily. Hence
     // it should not be called in this example as we resolve all relocations
@@ -516,6 +563,11 @@ void dl_entry(const uint64_t* prctx) {
 
     // Transfer control to user program.
     dso_prog.entry();
+
+    // Finalize main program.
+    fini(&dso_prog);
+    // Finalize library.
+    fini(&dso_lib);
 
     _exit(0);
 }

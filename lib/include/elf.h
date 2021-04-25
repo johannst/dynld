@@ -84,32 +84,36 @@ typedef struct {
 /// Dynamic Section
 /// ---------------
 
-#define DT_NULL     0  /* [ignored] Marks end of dynamic section */
-#define DT_NEEDED   1  /* [val] Name of needed library */
-#define DT_PLTRELSZ 2  /* [val] Size in bytes of PLT relocs */
-#define DT_PLTGOT   3  /* [ptr] Processor defined value */
-#define DT_HASH     4  /* [ptr] Address of symbol hash table */
-#define DT_STRTAB   5  /* [ptr] Address of string table */
-#define DT_SYMTAB   6  /* [ptr] Address of symbol table */
-#define DT_RELA     7  /* [ptr] Address of Rela relocs */
-#define DT_RELASZ   8  /* [val] Total size of Rela relocs */
-#define DT_RELAENT  9  /* [val] Size of one Rela reloc */
-#define DT_STRSZ    10 /* [val] Size of string table */
-#define DT_SYMENT   11 /* [val] Size of one symbol table entry */
-#define DT_INIT     12 /* [ptr] Address of init function */
-#define DT_FINI     13 /* [ptr] Address of termination function */
-#define DT_SONAME   14 /* [val] Name of shared object */
-#define DT_RPATH    15 /* [val] Library search path (deprecated) */
-#define DT_SYMBOLIC 16 /* [ignored] Start symbol search here */
-#define DT_REL      17 /* [ptr] Address of Rel relocs */
-#define DT_RELSZ    18 /* [val] Total size of Rel relocs */
-#define DT_RELENT   19 /* [val] Size of one Rel reloc */
-#define DT_PLTREL   20 /* [val] Type of reloc in PLT */
-#define DT_DEBUG    21 /* [ptr] For debugging; unspecified */
-#define DT_TEXTREL  22 /* [ignored] Reloc might modify .text */
-#define DT_JMPREL   23 /* [ptr] Address of PLT relocs */
-#define DT_BIND_NOW 24 /* [ignored] Process relocations of object */
-#define DT_MAX_CNT  25
+#define DT_NULL         0  /* [ignored] Marks end of dynamic section */
+#define DT_NEEDED       1  /* [val] Name of needed library */
+#define DT_PLTRELSZ     2  /* [val] Size in bytes of PLT relocs */
+#define DT_PLTGOT       3  /* [ptr] Processor defined value */
+#define DT_HASH         4  /* [ptr] Address of symbol hash table */
+#define DT_STRTAB       5  /* [ptr] Address of string table */
+#define DT_SYMTAB       6  /* [ptr] Address of symbol table */
+#define DT_RELA         7  /* [ptr] Address of Rela relocs */
+#define DT_RELASZ       8  /* [val] Total size of Rela relocs */
+#define DT_RELAENT      9  /* [val] Size of one Rela reloc */
+#define DT_STRSZ        10 /* [val] Size of string table */
+#define DT_SYMENT       11 /* [val] Size of one symbol table entry */
+#define DT_INIT         12 /* [ptr] Address of init function */
+#define DT_FINI         13 /* [ptr] Address of termination function */
+#define DT_SONAME       14 /* [val] Name of shared object */
+#define DT_RPATH        15 /* [val] Library search path (deprecated) */
+#define DT_SYMBOLIC     16 /* [ignored] Start symbol search here */
+#define DT_REL          17 /* [ptr] Address of Rel relocs */
+#define DT_RELSZ        18 /* [val] Total size of Rel relocs */
+#define DT_RELENT       19 /* [val] Size of one Rel reloc */
+#define DT_PLTREL       20 /* [val] Type of reloc in PLT */
+#define DT_DEBUG        21 /* [ptr] For debugging; unspecified */
+#define DT_TEXTREL      22 /* [ignored] Reloc might modify .text */
+#define DT_JMPREL       23 /* [ptr] Address of PLT relocs */
+#define DT_BIND_NOW     24 /* [ignored] Process relocations of object */
+#define DT_INIT_ARRAY   25 /* [ptr] Address of array of initialization functions */
+#define DT_FINI_ARRAY   26 /* [ptr] Address of array of termination functions */
+#define DT_INIT_ARRAYSZ 27 /* [val] Size in bytes of the initialization array */
+#define DT_FINI_ARRAYSZ 28 /* [val] Size in bytes of the termination array */
+#define DT_MAX_CNT      29
 
 typedef struct {
     uint64_t tag;
@@ -167,6 +171,8 @@ typedef struct {
 #define ELF64_R_TYPE(i) ((i)&0xffffffffL)
 
 // x86_64 relocation types.
-#define R_X86_64_COPY      5 /* Copy content from sym addr to relocation address */
-#define R_X86_64_GLOB_DAT  6 /* Address affected by relocation: `offset` (+ base) */
-#define R_X86_64_JUMP_SLOT 7 /* Address affected by relocation: `offset` (+ base) */
+#define R_X86_64_64        1 /* Absolute 64bit address, address affected by relocation: `base + offset` */
+#define R_X86_64_COPY      5 /* Copy content from sym addr to relocation address: `base + offset` */
+#define R_X86_64_GLOB_DAT  6 /* Address affected by relocation: `base + offset` */
+#define R_X86_64_JUMP_SLOT 7 /* Address affected by relocation: `base + offset` */
+#define R_X86_64_RELATIVE  8 /* Relative address *`base + offset` = `base + addend` */
