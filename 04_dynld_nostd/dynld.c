@@ -9,10 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-
-/// ----------------
-/// Global Constants
-/// ----------------
+// {{{ Global constans
 
 enum {
     // Hard-coded page size.
@@ -23,10 +20,8 @@ enum {
     MAX_NEEDED = 1,
 };
 
-
-/// --------
-/// Execinfo
-/// --------
+// }}}
+// {{{ Execinfo
 
 typedef struct {
     uint64_t argc;              // Number of commandline arguments.
@@ -61,10 +56,8 @@ ExecInfo get_exec_info(const uint64_t* prctx) {
     return info;
 }
 
-
-/// ---
-/// Dso
-/// ---
+// }}}
+// {{{ Dso
 
 typedef struct {
     uint8_t* base;                 // Base address.
@@ -204,10 +197,8 @@ const Elf64Rela* get_reloca(const Dso* dso, const uint64_t idx) {
     return (const Elf64Rela*)(dso->base + dso->dynamic[DT_RELA]) + idx;
 }
 
-
-/// -----------
-/// Init & Fini
-/// -----------
+// }}}
+// {{{ Init & Fini
 
 typedef void (*initfptr)();
 
@@ -239,10 +230,8 @@ static void fini(const Dso* dso) {
     }
 }
 
-
-/// -------------
-/// Symbol lookup
-/// -------------
+// }}}
+// {{{ Symbol lookup
 
 int strcmp(const char* s1, const char* s2) {
     while (*s1 == *s2 && *s1) {
@@ -275,10 +264,8 @@ void* lookup_sym(const Dso* dso, const char* sym_name) {
     return 0;
 }
 
-
-/// -----------------------------
-/// Map Shared Library Dependency
-/// -----------------------------
+// }}}
+// {{{ Map Shared Library Dependency
 
 Dso map_dependency(const char* dependency) {
     // For simplicity we only search for SO dependencies in the current working dir.
@@ -386,10 +373,8 @@ Dso map_dependency(const char* dependency) {
     return dso;
 }
 
-
-/// -------------------
-/// Resolve relocations
-/// -------------------
+// }}}
+// {{{ Resolve relocations
 
 struct LinkMap {
     const Dso* dso;              // Pointer to Dso list object.
@@ -466,10 +451,8 @@ static void resolve_relocs(const Dso* dso, const LinkMap* map) {
     }
 }
 
-
-/// ------------------------------
-/// Dynamic Linking (lazy resolve)
-/// ------------------------------
+// }}}
+// {{{ Dynamic Linking (lazy resolve)
 
 // Mark `dynresolve_entry` as `naked` because we want to fully control the
 // stack layout.
@@ -496,10 +479,8 @@ __attribute__((used)) __attribute__((unused)) static void dynresolve(uint64_t go
              got1, reloc_idx);
 }
 
-
-/// ---------
-/// Setup GOT
-/// ---------
+// }}}
+// {{{ Setup GOT
 
 void setup_got(const Dso* dso) {
     // GOT entries {0, 1, 2} have special meaning for the dynamic link process.
@@ -540,10 +521,9 @@ void setup_got(const Dso* dso) {
     }
 }
 
+// }}}
 
-/// -------------------------
-/// Dynamic Linker Entrypoint
-/// -------------------------
+// {{{ Dynamic Linker Entrypoint
 
 void dl_entry(const uint64_t* prctx) {
     // Parse SystemV ABI block.
@@ -608,3 +588,7 @@ void dl_entry(const uint64_t* prctx) {
 
     _exit(0);
 }
+
+// }}}
+
+// vim:fdm=marker
