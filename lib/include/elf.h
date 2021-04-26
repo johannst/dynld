@@ -60,6 +60,7 @@ typedef struct {
 #define PT_NOTE    4 /* Location of auxiliary information */
 #define PT_SHLIB   5 /* Reserved, but unspecified semantic */
 #define PT_PHDR    6 /* Location & size of program headers itself */
+#define PT_TLS     7 /* Thread local storage */
 
 #define PT_GNU_EH_FRAME 0x6474e550 /* [x86-64] stack unwinding tables */
 #define PT_LOPROC       0x70000000

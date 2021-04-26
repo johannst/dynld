@@ -139,6 +139,8 @@ static Dso get_prog_dso(const ExecInfo* info) {
         } else if (phdr->type == PT_DYNAMIC) {
             dynoff = phdr->vaddr;
         }
+
+        ERROR_ON(phdr->type == PT_TLS, "Thread local storage not supported found PT_TLS!");
     }
     ERROR_ON(dynoff == 0, "PT_DYNAMIC entry missing in the user programs PHDR!");
 
@@ -311,6 +313,8 @@ static Dso map_dependency(const char* dependency) {
                 addr_end = p->vaddr + p->memsz;
             }
         }
+
+        ERROR_ON(phdr->type == PT_TLS, "Thread local storage not supported found PT_TLS!");
     }
 
     // Align start address to the next lower page boundary.
