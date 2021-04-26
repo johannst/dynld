@@ -34,7 +34,7 @@ typedef struct {
 // Interpret and extract data passed on the stack by the Linux Kernel
 // when loading the initial process image.
 // The data is organized according to the SystemV x86_64 ABI.
-ExecInfo get_exec_info(const uint64_t* prctx) {
+static ExecInfo get_exec_info(const uint64_t* prctx) {
     ExecInfo info = {0};
 
     info.argc = *prctx;
@@ -64,10 +64,10 @@ typedef struct {
     void (*entry)();               // Entry function.
     uint64_t dynamic[DT_MAX_CNT];  // `.dynamic` section entries.
     uint64_t needed[MAX_NEEDED];   // Shared object dependencies (`DT_NEEDED` entries).
-    uint8_t needed_len;            // Number of `DT_NEEDED` entries (SO dependencies).
+    uint32_t needed_len;           // Number of `DT_NEEDED` entries (SO dependencies).
 } Dso;
 
-void decode_dynamic(Dso* dso, uint64_t dynoff) {
+static void decode_dynamic(Dso* dso, uint64_t dynoff) {
     // Decode `.dynamic` section of the `dso`.
     for (const Elf64Dyn* dyn = (const Elf64Dyn*)(dso->base + dynoff); dyn->tag != DT_NULL; ++dyn) {
         if (dyn->tag == DT_NEEDED) {
@@ -87,18 +87,12 @@ void decode_dynamic(Dso* dso, uint64_t dynoff) {
     ERROR_ON(dso->dynamic[DT_SYMENT] == 0, "DT_SYMENT missing in dynamic section!");
     ERROR_ON(dso->dynamic[DT_SYMENT] != sizeof(Elf64Sym), "ELf64Sym size miss-match!");
 
-    // Check for relocation entries related to PLT.
-    // ERROR_ON(dso->dynamic[DT_JMPREL] == 0, "DT_JMPREL missing in dynamic section!");
-    // ERROR_ON(dso->dynamic[DT_PLTRELSZ] == 0, "DT_PLTRELSZ missing in dynamic section!");
-    // ERROR_ON(dso->dynamic[DT_PLTREL] == 0, "DT_PLTREL missing in dynamic section!");
-    // ERROR_ON(dso->dynamic[DT_PLTREL] != DT_RELA, "x86_64 only uses RELA entries!");
-
     // Check for SystemV hash table. We only support SystemV hash tables
     // `DT_HASH`, not gnu hash tables `DT_GNU_HASH`.
     ERROR_ON(dso->dynamic[DT_HASH] == 0, "DT_HASH missing in dynamic section!");
 }
 
-Dso get_prog_dso(const ExecInfo* info) {
+static Dso get_prog_dso(const ExecInfo* info) {
     Dso prog = {0};
 
     // Determine the base address of the user program.
@@ -158,7 +152,7 @@ Dso get_prog_dso(const ExecInfo* info) {
     return prog;
 }
 
-uint64_t get_num_dynsyms(const Dso* dso) {
+static uint64_t get_num_dynsyms(const Dso* dso) {
     ERROR_ON(dso->dynamic[DT_HASH] == 0, "DT_HASH missing in dynamic section!");
 
     // Get SystemV hash table.
@@ -177,22 +171,22 @@ uint64_t get_num_dynsyms(const Dso* dso) {
     return hashtab[1];
 }
 
-const char* get_str(const Dso* dso, const uint64_t idx) {
+static const char* get_str(const Dso* dso, uint64_t idx) {
     ERROR_ON(dso->dynamic[DT_STRSZ] < idx, "String table indexed out-of-bounds!");
     return (const char*)(dso->base + dso->dynamic[DT_STRTAB] + idx);
 }
 
-const Elf64Sym* get_sym(const Dso* dso, const uint64_t idx) {
+static const Elf64Sym* get_sym(const Dso* dso, uint64_t idx) {
     ERROR_ON(get_num_dynsyms(dso) < idx, "Symbol table index out-of-bounds!");
     return (const Elf64Sym*)(dso->base + dso->dynamic[DT_SYMTAB]) + idx;
 }
 
-const Elf64Rela* get_pltreloca(const Dso* dso, const uint64_t idx) {
+static const Elf64Rela* get_pltreloca(const Dso* dso, uint64_t idx) {
     ERROR_ON(dso->dynamic[DT_PLTRELSZ] < sizeof(Elf64Rela) * idx, "PLT relocation table indexed out-of-bounds!");
     return (const Elf64Rela*)(dso->base + dso->dynamic[DT_JMPREL]) + idx;
 }
 
-const Elf64Rela* get_reloca(const Dso* dso, const uint64_t idx) {
+static const Elf64Rela* get_reloca(const Dso* dso, uint64_t idx) {
     ERROR_ON(dso->dynamic[DT_RELASZ] < sizeof(Elf64Rela) * idx, "RELA relocation table indexed out-of-bounds!");
     return (const Elf64Rela*)(dso->base + dso->dynamic[DT_RELA]) + idx;
 }
@@ -233,7 +227,7 @@ static void fini(const Dso* dso) {
 // }}}
 // {{{ Symbol lookup
 
-int strcmp(const char* s1, const char* s2) {
+static inline int strcmp(const char* s1, const char* s2) {
     while (*s1 == *s2 && *s1) {
         ++s1;
         ++s2;
@@ -249,14 +243,14 @@ int strcmp(const char* s1, const char* s2) {
 // performance for large symbol tables.
 //
 // `dso`          A handle to the dso which dynamic symbol table should be searched.
-// `sym_name`     Name of the symbol to look up.
-void* lookup_sym(const Dso* dso, const char* sym_name) {
+// `symname`     Name of the symbol to look up.
+static void* lookup_sym(const Dso* dso, const char* symname) {
     for (unsigned i = 0; i < get_num_dynsyms(dso); ++i) {
         const Elf64Sym* sym = get_sym(dso, i);
 
         if ((ELF64_ST_TYPE(sym->info) == STT_OBJECT || ELF64_ST_TYPE(sym->info) == STT_FUNC) && ELF64_ST_BIND(sym->info) == STB_GLOBAL &&
             sym->shndx != SHN_UNDEF) {
-            if (strcmp(sym_name, get_str(dso, sym->name)) == 0) {
+            if (strcmp(symname, get_str(dso, sym->name)) == 0) {
                 return dso->base + sym->value;
             }
         }
@@ -267,7 +261,7 @@ void* lookup_sym(const Dso* dso, const char* sym_name) {
 // }}}
 // {{{ Map Shared Library Dependency
 
-Dso map_dependency(const char* dependency) {
+static Dso map_dependency(const char* dependency) {
     // For simplicity we only search for SO dependencies in the current working dir.
     ERROR_ON(access(dependency, R_OK) != 0, "Dependency '%s' does not exist!\n", dependency);
 
@@ -376,11 +370,10 @@ Dso map_dependency(const char* dependency) {
 // }}}
 // {{{ Resolve relocations
 
-struct LinkMap {
+typedef struct LinkMap {
     const Dso* dso;              // Pointer to Dso list object.
     const struct LinkMap* next;  // Pointer to next LinkMap entry ('0' terminates the list).
-};
-typedef struct LinkMap LinkMap;
+} LinkMap;
 
 // Resolve a single relocation of `dso`.
 //
@@ -482,7 +475,7 @@ __attribute__((used)) __attribute__((unused)) static void dynresolve(uint64_t go
 // }}}
 // {{{ Setup GOT
 
-void setup_got(const Dso* dso) {
+static void setup_got(const Dso* dso) {
     // GOT entries {0, 1, 2} have special meaning for the dynamic link process.
     //   GOT[0]     Hold address of dynamic structure referenced by `_DYNAMIC`.
     //   GOT[1]     Argument pushed by PLT0 pad on stack before jumping to GOT[2],
