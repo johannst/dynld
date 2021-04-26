@@ -471,17 +471,22 @@ static void resolve_relocs(const Dso* dso, const LinkMap* map) {
 /// Dynamic Linking (lazy resolve)
 /// ------------------------------
 
+// Mark `dynresolve_entry` as `naked` because we want to fully control the
+// stack layout.
+//
 // `noreturn`  Function never returns.
 // `naked`     Don't generate prologue/epilogue sequences.
 __attribute__((noreturn)) __attribute__((naked)) static void dynresolve_entry() {
     asm("dynresolve_entry:\n\t"
-        // Pop arguments on stack from PLT0 into rdi/rsi argument registers.
+        // Pop arguments of PLT0 from the stack into rdi/rsi registers
+        // These are the first two integer arguments registers as defined by
+        // the SystemV abi and hence will be passed correctly to `dynresolve`.
         "pop %rdi\n\t"  // GOT[1] entry (pushed by PLT0 pad).
         "pop %rsi\n\t"  // Relocation index (pushed by PLT0 pad).
         "jmp dynresolve");
 }
 
-// `used`    Foce to emit code for function.
+// `used`    Force to emit code for function.
 // `unused`  Don't warn about unused function.
 __attribute__((used)) __attribute__((unused)) static void dynresolve(uint64_t got1, uint64_t reloc_idx) {
     ERROR_ON(true,
@@ -489,6 +494,50 @@ __attribute__((used)) __attribute__((unused)) static void dynresolve(uint64_t go
              "\n\tGOT[1]    = 0x%x"
              "\n\treloc_idx = %d\n",
              got1, reloc_idx);
+}
+
+
+/// ---------
+/// Setup GOT
+/// ---------
+
+void setup_got(const Dso* dso) {
+    // GOT entries {0, 1, 2} have special meaning for the dynamic link process.
+    //   GOT[0]     Hold address of dynamic structure referenced by `_DYNAMIC`.
+    //   GOT[1]     Argument pushed by PLT0 pad on stack before jumping to GOT[2],
+    //              can be freely used by dynamic linker to identify the caller.
+    //   GOT[2]     Jump target for PLT0 pad when doing dynamic resolve (lazy).
+    //
+    // We will not make use of GOT[0]/GOT[1] here but only GOT[2].
+
+    // Install dynamic resolve handler. This handler is used when binding
+    // symbols lazy.
+    //
+    // The handler is installed in the `GOT[2]` entry for each DSO object that
+    // has a GOT. It is jumped to from the `PLT0` pad with the following two
+    // arguments passed via the stack:
+    //   - GOT[1] entry.
+    //   - Relocation index.
+    //
+    // This can be seen in the following disassembly of section .plt:
+    //   PLT0:
+    //     push   QWORD PTR [rip+0x3002]        # GOT[1]
+    //     jmp    QWORD PTR [rip+0x3004]        # GOT[2]
+    //     nop    DWORD PTR [rax+0x0]
+    //
+    //   PLT1:
+    //     jmp    QWORD PTR [rip+0x3002]        # GOT[3]; entry for <PLT1>
+    //     push   0x0                           # Relocation index
+    //     jmp    401000 <PLT0>
+    //
+    // The handler at GOT[2] can pop the arguments as follows:
+    //    pop %rdi  // GOT[1] entry.
+    //    pop %rsi  // Relocation index.
+
+    if (dso->dynamic[DT_PLTGOT] != 0) {
+        uint64_t* got = (uint64_t*)(dso->base + dso->dynamic[DT_PLTGOT]);
+        got[2] = (uint64_t)&dynresolve_entry;
+    }
 }
 
 
@@ -517,7 +566,7 @@ void dl_entry(const uint64_t* prctx) {
     ERROR_ON(dso_prog.needed_len != 1, "User program should have exactly one dependency!");
 
     const Dso dso_lib = map_dependency(get_str(&dso_prog, dso_prog.needed[0]));
-    ERROR_ON(dso_lib.needed_len != 0, "The programs dependency should be stand-alone!");
+    ERROR_ON(dso_lib.needed_len != 0, "The library should not have any further dependencies!");
 
     // Setup LinkMap.
     //
@@ -537,29 +586,17 @@ void dl_entry(const uint64_t* prctx) {
     // Initialize main program.
     init(&dso_prog);
 
-    // Install dynamic resolve handler (lazy resolve).
+    // Setup global offset table (GOT).
     //
-    // The dynamic resolve handler is used when binding symbols lazily. Hence
-    // it should not be called in this example as we resolve all relocations
-    // before transfering controll to the user program.
+    // This installs a dynamic resolve handler, which should not be called in
+    // this example as we resolve all relocations before transferring control
+    // to the user program.
     // For safety we still install a handler which will terminate the program
-    // once it is called, if we wouldn't install this handler the program would
-    // most probably SEGFAULT.
-    //
-    // The handler is installed in the `GOT[2]` entry for each DSO object that
-    // has an GOT. It is jumped to from the `PLT0` pad with the following two
-    // arguments passed via the stack:
-    //    pop %rdi  // GOT[1] entry.
-    //    pop %rsi  // Relocation index.
-    {
-        uint64_t* got = (uint64_t*)(dso_prog.base + dso_prog.dynamic[DT_PLTGOT]);
-        // Jump target for PLT0 pad.
-        got[2] = (uint64_t)&dynresolve_entry;
-    }
-
-    // GOT[0];  // Hold address of dynamic structure referenced by `_DYNAMIC`.
-    // GOT[1];  // Pushed by PLT0 pad on stack before jumping to got[2] -> Word the dynamic linker can use to identify the caller.
-    // GOT[2];  // Jump target for PLT0 pad (when doing lazy resolving).
+    // once it is called. If we wouldn't install this handler the program would
+    // most probably SEGFAULT in case symbol binding would be invoked during
+    // runtime.
+    setup_got(&dso_lib);
+    setup_got(&dso_prog);
 
     // Transfer control to user program.
     dso_prog.entry();
