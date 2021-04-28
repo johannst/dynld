@@ -1,10 +1,9 @@
 // Copyright (c) 2020 Johannes Stoelp
 
-#include <io.h>
 #include <fmt.h>
+#include <io.h>
 #include <syscall.h>
-
-#include <asm/unistd.h>
+#include <syscalls.h>
 
 // `pfmt` uses fixed-size buffer on the stack for formating the message
 // (for simplicity and since we don't impl buffered I/O).
@@ -21,14 +20,14 @@ static int vdfmt(int fd, const char* fmt, va_list ap) {
     int ret = vfmt(buf, sizeof(buf), fmt, ap);
 
     if (ret > MAX_PRINTF_LEN - 1) {
-        syscall3(__NR_write, fd, buf, MAX_PRINTF_LEN - 1);
+        write(fd, buf, MAX_PRINTF_LEN - 1);
 
         static const char warn[] = "\npfmt: Message truncated, max length can be configured by defining MAX_PRINTF_LEN\n";
-        syscall3(__NR_write, FD_STDERR, warn, sizeof(warn));
+        write(FD_STDERR, warn, sizeof(warn));
         return MAX_PRINTF_LEN - 1;
     }
 
-    syscall3(__NR_write, fd, buf, ret);
+    write(fd, buf, ret);
     return ret;
 }
 
