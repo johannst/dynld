@@ -25,6 +25,11 @@ dynld.so: dynld.S dynld.c ../lib/libcommon.a
 	    -Wl,--no-allow-shlib-undefined \
 	    $^
 
+	@if ! readelf -r $@ | grep 'There are no relocations in this file' >& /dev/null; then \
+		echo "ERROR: $@ contains relocations while we don't support relocations in $@!"; \
+		exit 1; \
+	fi
+
 ../lib/libcommon.a:
 	make -C ../lib
 
