@@ -65,12 +65,12 @@ user_entry();
 
 ## User program
 
-The next step is to create the user program that will be loaded by
-the dynamic linker created in the previous section.
-For now the functionality of the user program is not important, but it
-must full-fill the requirements no to depend on any shared libraries or
+The next step is to create the user program that will be jumped to by the
+dynamic linker created above.
+For now the functionality of the user program is not really important, but it
+must full-fill the requirements to not depend on any shared libraries or
 contain any relocations.
-For this purpose the following simple `no-std` program is used:
+For this purpose the following `no-std` program is used:
 ```c
 #include <syscall.h>
 #include <io.h>
@@ -90,7 +90,8 @@ section. This can be done with the following command line switch:
 ```bash
 gcc ... -Wl,--dynamic-linker=<path> ...
 ```
-> The full compile and link command can be seen in the [Makefile - main](./Makefile).
+> The full compile and link command can be seen in the [Makefile - main
+> target](./Makefile).
 
 The result can be seen in the `.interp` sections referenced by the
 `PT_INTERP` segment in the program headers:
@@ -112,7 +113,7 @@ Program Headers:
 ```
 
 As discussed in [01_dynamic_linking](../01_dynamic_linking/README.md)
-the `PT_INTERP` segment tells to Linux Kernel which dynamic linker to
+the `PT_INTERP` segment tells the Linux Kernel which dynamic linker to
 load to handle the startup of the user executable.
 
 When running the `./main` user program, the `dynld.so` will be loaded
