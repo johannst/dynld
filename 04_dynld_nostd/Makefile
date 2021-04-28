@@ -42,12 +42,12 @@ libgreet.so: libgreet.c
 # We assert that the dynamic linker doesn't contain any relocations as we
 # didn't implement support to resolve its own relocations.
 dynld.so: dynld.S dynld.c ../lib/libcommon.a
-	gcc -o $@                          \
-	    $(COMMON_CFLAGS)               \
-	    -fPIC -static-pie              \
-	    -fvisibility=hidden            \
-	    -Wl,--entry=dl_start           \
-	    -Wl,--no-allow-shlib-undefined \
+	gcc -o $@                \
+	    $(COMMON_CFLAGS)     \
+	    -fPIC -static-pie    \
+	    -fvisibility=hidden  \
+	    -Wl,--entry=dl_start \
+	    -Wl,--no-undefined   \
 	    $^
 
 	@if ! readelf -r $@ | grep 'There are no relocations in this file' >& /dev/null; then \

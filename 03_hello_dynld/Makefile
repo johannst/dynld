@@ -17,12 +17,12 @@ main: dynld.so main.c ../lib/libcommon.a
 	readelf -W --program-headers $@
 
 dynld.so: dynld.S dynld.c ../lib/libcommon.a
-	gcc -o $@                          \
-	    $(COMMON_CFLAGS)               \
-	    -fPIC                          \
-	    -fvisibility=hidden            \
-	    -Wl,--entry=dl_start           \
-	    -Wl,--no-allow-shlib-undefined \
+	gcc -o $@                \
+	    $(COMMON_CFLAGS)     \
+	    -fPIC                \
+	    -fvisibility=hidden  \
+	    -Wl,--entry=dl_start \
+	    -Wl,--no-undefined   \
 	    $^
 
 	@if ! readelf -r $@ | grep 'There are no relocations in this file' >& /dev/null; then \
