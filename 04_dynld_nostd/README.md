@@ -153,19 +153,166 @@ The dynamic linker developed here is kept simple and mainly used to explore the
 mechanics of dynamic linking.  That said, it means that it is tailored
 specifically for the previously developed executable and won't support things as
 - Multiple shared library dependencies.
-- Dynamic resolve during runtime (lazy).
-- Threads locals storage (TLS).
+- Dynamic symbol resolve during runtime (lazy bindings).
+- Passing arguments to the user program.
+- Thread locals storage (TLS).
 
-However with a little effort this dynamic linker could easily be extend.
+However, with a little effort, this dynamic linker could easily be extend and
+generalized more.
 
-Before diving into details, let's first define the high-level tasks of
+Before diving into details, let's first define the high-level structure of
 `dynld.so`:
-1. Parse out necessary information from the initial process context ([`SystemV`
+1. Decode initial process state from the stack([`SystemV ABI`
    context](../02_process_init/README.md#stack-state-on-process-entry)).
-1. Map `libgreet.so` shared library dependency.
+1. Map the `libgreet.so` shared library dependency.
 1. Resolve all relocations of `libgreet.so` and `main`.
 1. Run `INIT` functions of `libgreet.so` and `main`.
-1. Transfer control to `main` user program.
+1. Transfer control to user program `main`.
 1. Run `FINI` functions of `libgreet.so` and `main`.
+
+When discussing the dynamic linkers functionality below, it is helpful to
+understand and keep the following links between the ELF structures in mind.
+- From the `PHDR` the dynamic linker can find the `.dynamic` section.
+- From the `.dynamic` section, the dynamic linker can find all information
+  required for dynamic linking such as the `relocation table`, `symbol table` and
+  so on.
+```text
+               PHDR
+AT_PHDR ----> +------------+
+              | ...        |
+              |            |        .dynamic
+              | PT_DYNAMIC | ----> +-----------+
+              |            |       | DT_SYMTAB | ----> [ Symbol Table (.dynsym) ]
+              | ...        |       | DT_STRTAB | ----> [ String Table (.dynstr) ]
+              +------------+       | DT_RELA   | ----> [ Relocation Table (.rela.dyn) ]
+                                   | DT_JMPREL | ----> [ Relocation Table (.rela.plt) ]
+                                   | DT_NEEDED | ----> Shared Library Dependency
+                                   | ...       |
+                                   +-----------+
+```
+
+### (1) Decode initial process state from the stack
+
+This step consists of decoding the `SystemV ABI` block on the stack into an
+appropriate data structure. The details about this have already been discussed
+in [02 Process initialization](../02_process_init/).
+```c
+typedef struct {
+    uint64_t argc;              // Number of commandline arguments.
+    const char** argv;          // List of pointer to command line arguments.
+    uint64_t envc;              // Number of environment variables.
+    const char** envv;          // List of pointers to environment variables.
+    uint64_t auxv[AT_MAX_CNT];  // Auxiliary vector entries.
+} SystemVDescriptor;
+
+void dl_entry(const uint64_t* prctx) {
+    // Parse SystemV ABI block.
+    const SystemVDescriptor sysv_desc = get_systemv_descriptor(prctx);
+    ...
+```
+
+With the SystemV ABI descriptor, the next step is to extract the information of
+the user program that are of interest to the dynamic linker. 
+That information is captured in a `dynamic shared object (dso)` structure:
+```c
+typedef struct {
+    uint8_t* base;                 // Base address.
+    void (*entry)();               // Entry function.
+    uint64_t dynamic[DT_MAX_CNT];  // `.dynamic` section entries.
+    uint64_t needed[MAX_NEEDED];   // Shared object dependencies (`DT_NEEDED` entries).
+    uint32_t needed_len;           // Number of `DT_NEEDED` entries (SO dependencies).
+} Dso;
+```
+
+Filling in the `dso` structure is achieved by following the ELF structures as
+shown above. 
+First, the address of the program headers can be found in the `AT_PHDR` entry
+in the auxiliary vector. From there the `.dynamic` section can be located by
+using the program header `PT_DYNAMIC->vaddr` entry.
+
+However before using the `vaddr` field, first the `base address` of the `dso`
+needs to be computed. This is important because addresses in the program header
+and the dynamic section are relative to the `base address`.
+
+Computing the `base address` can be done by using the `PT_PHDR` program header
+which describes the program headers itself. The absolute `base address` is then
+computed by subtracting the relative `PT_PHDR->vaddr` from the absolute address
+in the `AT_PDHR` entry from the auxiliary vector. Looking at the figure below
+this becomes more clearer.
+```text
+                VMA
+                |         |
+base address -> |         |  -
+                |         |  | <---------------------+
+     AT_PHDR -> +---------+  -                       |
+                |         |                          |
+                | PT_PHDR | -----> Elf64Phdr { .., vaddr, .. }
+                |         |
+                +---------+
+                |         |
+```
+> For `non-pie` executables the `base address` is typically `0x0`, while for
+> `pie` executables it is typically **not** `0x0`.
+
+Looking at the concrete implementation in the dynamic linker, computing the
+`base address` can be see here and the result is stored in the `dso` object
+representing the user program.
+```c
+static Dso get_prog_dso(const SystemVDescriptor* sysv) {
+    ...
+    const Elf64Phdr* phdr = (const Elf64Phdr*)sysv->auxv[AT_PHDR];
+    for (unsigned phdrnum = sysv->auxv[AT_PHNUM]; --phdrnum; ++phdr) {
+        if (phdr->type == PT_PHDR) {
+            prog.base = (uint8_t*)(sysv->auxv[AT_PHDR] - phdr->vaddr);
+        } else if (phdr->type == PT_DYNAMIC) {
+            dynoff = phdr->vaddr;
+        }
+    }
+```
+
+Continuing, the next step is to decode the `.dynamic` section.  Entries in the
+`.dynamic` section are comprised of `2 x 64bit` words and are interpreted as
+follows:
+```c
+typedef struct {
+    uint64_t tag;
+    union {
+        uint64_t val;
+        void* ptr;
+    };
+} Elf64Dyn;
+```
+> Tags are defined in [elf.h](../lib/include/elf.h).
+
+With the absolute `base address` of the `dso` the `.dynamic` section can be
+located by using the address from the `PT_DYNAMIC->vaddr`. When iterating over
+the program headers above, this offset was already stored in `dynoff` and
+passed to the `decode_dynamic` function.
+```c
+static void decode_dynamic(Dso* dso, uint64_t dynoff) {
+    for (const Elf64Dyn* dyn = (const Elf64Dyn*)(dso->base + dynoff); dyn->tag != DT_NULL; ++dyn) {
+        if (dyn->tag == DT_NEEDED) {
+            dso->needed[dso->needed_len++] = dyn->val;
+        } else if (dyn->tag < DT_MAX_CNT) {
+            dso->dynamic[dyn->tag] = dyn->val;
+        }
+    }
+    ...
+```
+
+The last step to extract the info of the user program is to store the address
+of the entry function where the dynamic linker will pass control to later. This
+can be found in the auxiliary vector in the `AT_ENTRY` entry.
+```c
+static Dso get_prog_dso(const SystemVDescriptor* sysv) {
+    ...
+    prog.entry = (void (*)())sysv->auxv[AT_ENTRY];
+```
+
+### (2) Map `libgreet.so`
+### (3) Resolve relocations
+### (4) Run `init` functions
+### (5) Run the user program
+### (6) Run `fini` functions
 
 [gcc-fn-attributes]: https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#Common-Function-Attributes
