@@ -21,7 +21,7 @@ enum {
 };
 
 // }}}
-// {{{ Execinfo
+// {{{ SystemVDescriptor
 
 typedef struct {
     uint64_t argc;              // Number of commandline arguments.
@@ -29,31 +29,31 @@ typedef struct {
     uint64_t envc;              // Number of environment variables.
     const char** envv;          // List of pointers to environment variables.
     uint64_t auxv[AT_MAX_CNT];  // Auxiliary vector entries.
-} ExecInfo;
+} SystemVDescriptor;
 
 // Interpret and extract data passed on the stack by the Linux Kernel
 // when loading the initial process image.
 // The data is organized according to the SystemV x86_64 ABI.
-static ExecInfo get_exec_info(const uint64_t* prctx) {
-    ExecInfo info = {0};
+static SystemVDescriptor get_systemv_descriptor(const uint64_t* prctx) {
+    SystemVDescriptor sysv = {0};
 
-    info.argc = *prctx;
-    info.argv = (const char**)(prctx + 1);
-    info.envv = (const char**)(info.argv + info.argc + 1);
+    sysv.argc = *prctx;
+    sysv.argv = (const char**)(prctx + 1);
+    sysv.envv = (const char**)(sysv.argv + sysv.argc + 1);
 
     // Count the number of environment variables in the `ENVP` segment.
-    for (const char** env = info.envv; *env; ++env) {
-        info.envc += 1;
+    for (const char** env = sysv.envv; *env; ++env) {
+        sysv.envc += 1;
     }
 
     // Decode auxiliary vector `AUXV`.
-    for (const Auxv64Entry* auxvp = (const Auxv64Entry*)(info.envv + info.envc + 1); auxvp->tag != AT_NULL; ++auxvp) {
+    for (const Auxv64Entry* auxvp = (const Auxv64Entry*)(sysv.envv + sysv.envc + 1); auxvp->tag != AT_NULL; ++auxvp) {
         if (auxvp->tag < AT_MAX_CNT) {
-            info.auxv[auxvp->tag] = auxvp->val;
+            sysv.auxv[auxvp->tag] = auxvp->val;
         }
     }
 
-    return info;
+    return sysv;
 }
 
 // }}}
@@ -92,7 +92,7 @@ static void decode_dynamic(Dso* dso, uint64_t dynoff) {
     ERROR_ON(dso->dynamic[DT_HASH] == 0, "DT_HASH missing in dynamic section!");
 }
 
-static Dso get_prog_dso(const ExecInfo* info) {
+static Dso get_prog_dso(const SystemVDescriptor* sysv) {
     Dso prog = {0};
 
     // Determine the base address of the user program.
@@ -121,21 +121,21 @@ static Dso get_prog_dso(const ExecInfo* info) {
     //              |         |
     //
     // PROG BASE = AT_PHDR - PT_PHDR.vaddr
-    ERROR_ON(info->auxv[AT_PHDR] == 0 || info->auxv[AT_EXECFD] != 0, "AT_PHDR entry missing in the AUXV!");
+    ERROR_ON(sysv->auxv[AT_PHDR] == 0 || sysv->auxv[AT_EXECFD] != 0, "AT_PHDR entry missing in the AUXV!");
 
     // Offset to the `.dynamic` section from the user programs `base addr`.
     uint64_t dynoff = 0;
 
     // Program header of the user program.
-    const Elf64Phdr* phdr = (const Elf64Phdr*)info->auxv[AT_PHDR];
+    const Elf64Phdr* phdr = (const Elf64Phdr*)sysv->auxv[AT_PHDR];
 
-    ERROR_ON(info->auxv[AT_PHENT] != sizeof(Elf64Phdr), "Elf64Phdr size miss-match!");
+    ERROR_ON(sysv->auxv[AT_PHENT] != sizeof(Elf64Phdr), "Elf64Phdr size miss-match!");
 
     // Decode PHDRs of the user program.
-    for (unsigned phdrnum = info->auxv[AT_PHNUM]; --phdrnum; ++phdr) {
+    for (unsigned phdrnum = sysv->auxv[AT_PHNUM]; --phdrnum; ++phdr) {
         if (phdr->type == PT_PHDR) {
-            ERROR_ON(info->auxv[AT_PHDR] < phdr->vaddr, "Expectation auxv[AT_PHDR] >= phdr->vaddr failed!");
-            prog.base = (uint8_t*)(info->auxv[AT_PHDR] - phdr->vaddr);
+            ERROR_ON(sysv->auxv[AT_PHDR] < phdr->vaddr, "Expectation auxv[AT_PHDR] >= phdr->vaddr failed!");
+            prog.base = (uint8_t*)(sysv->auxv[AT_PHDR] - phdr->vaddr);
         } else if (phdr->type == PT_DYNAMIC) {
             dynoff = phdr->vaddr;
         }
@@ -148,8 +148,8 @@ static Dso get_prog_dso(const ExecInfo* info) {
     decode_dynamic(&prog, dynoff);
 
     // Get the entrypoint of the user program form the auxiliary vector.
-    ERROR_ON(info->auxv[AT_ENTRY] == 0, "AT_ENTRY entry missing in the AUXV!");
-    prog.entry = (void (*)())info->auxv[AT_ENTRY];
+    ERROR_ON(sysv->auxv[AT_ENTRY] == 0, "AT_ENTRY entry missing in the AUXV!");
+    prog.entry = (void (*)())sysv->auxv[AT_ENTRY];
 
     return prog;
 }
@@ -265,6 +265,7 @@ static void* lookup_sym(const Dso* dso, const char* symname) {
 
 static Dso map_dependency(const char* dependency) {
     // For simplicity we only search for SO dependencies in the current working dir.
+    // So no support for DT_RPATH/DT_RUNPATH and LD_LIBRARY_PATH.
     ERROR_ON(access(dependency, R_OK) != 0, "Dependency '%s' does not exist!\n", dependency);
 
     const int fd = open(dependency, O_RDONLY);
@@ -524,14 +525,14 @@ static void setup_got(const Dso* dso) {
 
 void dl_entry(const uint64_t* prctx) {
     // Parse SystemV ABI block.
-    const ExecInfo exec_info = get_exec_info(prctx);
+    const SystemVDescriptor sysv_desc = get_systemv_descriptor(prctx);
 
     // Ensure hard-coded page size value is correct.
-    ERROR_ON(exec_info.auxv[AT_PAGESZ] != PAGE_SIZE, "Hard-coded PAGE_SIZE miss-match!");
+    ERROR_ON(sysv_desc.auxv[AT_PAGESZ] != PAGE_SIZE, "Hard-coded PAGE_SIZE miss-match!");
 
     // Initialize dso handle for user program but extracting necesarry
     // information from `AUXV` and the `PHDR`.
-    const Dso dso_prog = get_prog_dso(&exec_info);
+    const Dso dso_prog = get_prog_dso(&sysv_desc);
 
     // Map dependency.
     //
