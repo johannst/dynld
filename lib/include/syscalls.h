@@ -25,6 +25,7 @@ ssize_t read(int fd, void* buf, size_t count);
 ssize_t pread(int fd, void* buf, size_t count, off_t offset);
 
 // mmap - prot:
+#define PROT_NONE  0x0
 #define PROT_READ  0x1
 #define PROT_WRITE 0x2
 #define PROT_EXEC  0x4

@@ -324,7 +324,7 @@ static Dso map_dependency(const char* dependency) {
     addr_end = (addr_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
     // Reserve region big enough to map all `PT_LOAD` sections of `dependency`.
-    uint8_t* map = mmap(0 /* addr */, addr_end - addr_start /* len */, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+    uint8_t* map = mmap(0 /* addr */, addr_end - addr_start /* len */, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS,
                         -1 /* fd */, 0 /* file offset */);
     ERROR_ON(map == MAP_FAILED, "Failed to mmap address space for dependency '%s'\n", dependency);
 
