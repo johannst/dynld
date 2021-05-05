@@ -334,7 +334,6 @@ static Dso map_dependency(const char* dependency) {
     // Map in all `PT_LOAD` segments from the `dependency`.
     for (unsigned i = 0; i < ehdr.phnum; ++i) {
         const Elf64Phdr* p = &phdr[i];
-        ;
         if (p->type != PT_LOAD) {
             continue;
         }
