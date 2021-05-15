@@ -397,10 +397,49 @@ static void resolve_reloc(const Dso* dso, const LinkMap* map, const Elf64Rela* r
     void* symaddr = 0;
     // FIXME: Should relocations of type `R_X86_64_64` only be looked up in `dso` directly?
     if (reloctype == R_X86_64_RELATIVE) {
-        // Symbols address is computed by re-basing the relative address based on the DSOs base address.
+        // Symbols address is computed by re-basing the relative address based
+        // on the DSOs base address.
         symaddr = (void*)(dso->base + reloc->addend);
     } else {
-        // TODO: Explain special handling of R_X86_64_COPY.
+        // Special handling of `R_X86_64_COPY` relocations.
+        //
+        // The `R_X86_64_COPY` relocation type is used in the main program when
+        // it references an object provided by a shared library (eg extern
+        // declared variable).
+        // The static linker will still allocate storage for the external
+        // object in the main programs `.bss` section and any reference to the
+        // object from the main program are resolved by the static linker to
+        // the location in the `.bss` section directly (relative addressing).
+        // During runtime, when resolving the `R_X86_64_COPY` relocation, the
+        // dynamic linker will copy the initial value from the shared library
+        // that actually provides the objects symbol into the location of the
+        // main program. References to the object by other shared library are
+        // resolved to the location in the main programs `.bss` section.
+        //
+        // LinkMap:        Relocs:
+        //
+        // main program    { sym: foo, type: R_X86_64_COPY }
+        //      |
+        //      v
+        //    libso        { sym: foo, type: R_X86_64_GLOB_DAT }
+        //                 // Also `foo` is defined in `libso`.
+        //
+        //       main prog                         libso
+        //       +-----------+                     +-----------+
+        //       | .text     |                     | .text     |
+        //  ref  |           |                     |           |
+        //    +--| ... [foo] | +-------------------| ... [foo] |
+        //    |  |           | | R_X86_64_GLOB_DAT |           |
+        //    |  +-----------+ | Resolve reference +-----------+
+        //    |  | .bss      | | to foo.           | .data     |
+        //    |  |           | /                   |           |
+        //    +->| foo: ...  |<--------------------| foo: ...  |
+        //       |           | R_X86_64_COPY       |           |
+        //       +-----------+ Copy initial value. +-----------+
+        //
+        //
+        // The handling of `R_X86_64_COPY` relocation assumes that the main
+        // program is always the first entry in the link map.
         for (const LinkMap* lmap = (reloctype == R_X86_64_COPY ? map->next : map); lmap && symaddr == 0; lmap = lmap->next) {
             symaddr = lookup_sym(lmap->dso, symname);
         }
@@ -451,8 +490,12 @@ static void resolve_relocs(const Dso* dso, const LinkMap* map) {
 // }}}
 // {{{ Dynamic Linking (lazy resolve)
 
-// Mark `dynresolve_entry` as `naked` because we want to fully control the
-// stack layout.
+// Dynamic link handler for lazy resolve.
+// This handler is installed in the GOT[2] entry of `Dso` objects which holds
+// the address of the jump target for the PLT0 jump pad.
+//
+// Mark `dynresolve_entry` as `naked` because we don't want a prologue/epilogue
+// being generated so we have full control over the stack layout.
 //
 // `noreturn`  Function never returns.
 // `naked`     Don't generate prologue/epilogue sequences.
