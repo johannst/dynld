@@ -390,8 +390,8 @@ static void resolve_reloc(const Dso* dso, const LinkMap* map, const Elf64Rela* r
     const Elf64Sym* sym = get_sym(dso, symidx);
     const char* symname = get_str(dso, sym->name);
 
-    // Get relocation typy.
-    unsigned reloctype = ELF64_R_TYPE(reloc->info);
+    // Get relocation type.
+    const unsigned reloctype = ELF64_R_TYPE(reloc->info);
 
     // Find symbol address.
     void* symaddr = 0;
@@ -424,19 +424,21 @@ static void resolve_reloc(const Dso* dso, const LinkMap* map, const Elf64Rela* r
         //    libso        { sym: foo, type: R_X86_64_GLOB_DAT }
         //                 // Also `foo` is defined in `libso`.
         //
-        //       main prog                         libso
-        //       +-----------+                     +-----------+
-        //       | .text     |                     | .text     |
-        //  ref  |           |                     |           |
-        //    +--| ... [foo] | +-------------------| ... [foo] |
-        //    |  |           | | R_X86_64_GLOB_DAT |           |
-        //    |  +-----------+ | Resolve reference +-----------+
-        //    |  | .bss      | | to foo.           | .data     |
-        //    |  |           | /                   |           |
+        //                                         libso
+        //                                         +-----------+
+        //                                         | .text     |
+        //       main prog                         |           |  ref
+        //       +-----------+                     | ... [foo] |--+
+        //       | .text     |   R_X86_64_GLOB_DAT |           |  |
+        //  ref  |           |   Patch address of  +-----------+  |
+        //    +--| ... [foo] |   foo in .got.      | .got      |  |
+        //    |  |           | +------------------>| foo:      |<-+
+        //    |  +-----------+ |                   |           |
+        //    |  | .bss      | |                   +-----------+
+        //    |  |           | /                   | .data     |
         //    +->| foo: ...  |<--------------------| foo: ...  |
         //       |           | R_X86_64_COPY       |           |
         //       +-----------+ Copy initial value. +-----------+
-        //
         //
         // The handling of `R_X86_64_COPY` relocation assumes that the main
         // program is always the first entry in the link map.
