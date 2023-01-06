@@ -5,12 +5,14 @@ linking` on Linux(x86_64). It is mainly used for personal studies, but may be
 useful to some random internet user.
 
 All studies and discussions assume the following environment:
+
 - Arch: `x86_64`
 - OS: `Linux Kernel`
 - System ABI: `SystemV x86_64 ABI`
 - BinFMT: `ELF`
 
 The studies are structured as follows:
+
 1. [Ch 01 dynamic linking](./01_dynamic_linking):
    Brief introduction to dynamic linking.
 1. [Ch 02 process initialization](./02_process_init):
