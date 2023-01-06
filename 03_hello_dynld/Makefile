@@ -23,6 +23,7 @@ dynld.so: dynld.S dynld.c ../lib/libcommon.a
 	    -fvisibility=hidden  \
 	    -Wl,--entry=dl_start \
 	    -Wl,--no-undefined   \
+	    -fno-stack-protector \
 	    $^
 
 	@if ! readelf -r $@ | grep 'There are no relocations in this file' >& /dev/null; then \

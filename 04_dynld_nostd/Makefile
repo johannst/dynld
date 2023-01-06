@@ -2,7 +2,7 @@
 
 COMMON_CFLAGS := -g -O0 -Wall -Wextra \
                  -I../lib/include     \
-                 -nostartfiles -nodefaultlibs
+                 -nostartfiles -nodefaultlibs -fno-stack-protector
 
 run: main
 	./$<
@@ -61,3 +61,4 @@ dynld.so: dynld.S dynld.c ../lib/libcommon.a
 clean:
 	rm -f main libgreet.so
 	rm -f dynld.so
+	make -C ../lib clean

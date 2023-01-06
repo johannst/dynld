@@ -23,6 +23,7 @@ src/%.o: src/%.c
 	    -Wall -Wextra       \
 	    -I$(CURDIR)/include \
 	    -nostdlib           \
+	    -fno-stack-protector \
 	    $<
 
 clean:
