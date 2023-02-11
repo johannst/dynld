@@ -638,10 +638,11 @@ Shared libraries on the other hand that also reference the same symbol will go
 though a `GOT` entry that is patched by the dynamic linker to point to the
 location in the `.bss` section of the main program.
 Below this can be seen by the `mov` instruction at address `1024` that the
-relative address `3ff8` is dereferenced to get the value of the `gCalled`
-variable. In the `readelf` dump above it can be seen that there is a relocation
-of type `R_X86_64_GLOB_DAT` for symbol `gCalled` affecting the relative address
-`3ff8` in the shared library.
+relative address `3ff8` is dereferenced, which is the GOT entry for `gCalled`,
+to get the address of `gCalled`. The next instruction at `102b` then loads the
+value of `gCalled` iteself. In the `readelf` dump above it can be seen that
+there is a relocation of type `R_X86_64_GLOB_DAT` for symbol `gCalled`
+affecting the relative address `3ff8` in the shared library.
 ```bash
 > objdump -M intel -d -j .text -j .got libgreet.so
 
@@ -653,7 +654,7 @@ Disassembly of section .text:
     1020:   55                      push   rbp
     1021:   48 89 e5                mov    rbp,rsp
     1024:   48 8b 05 cd 2f 00 00    mov    rax,QWORD PTR [rip+0x2fcd]        # 3ff8 <gCalled-0x28>
-
+    102b:   8b 00                   mov    eax,DWORD PTR [rax]               # load gCalled
 ...
 
 Disassembly of section .got:
