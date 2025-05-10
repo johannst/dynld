@@ -1,4 +1,6 @@
-// Copyright (c) 2021 Johannes Stoelp
+// SPDX-License-Identifier: MIT
+//
+// Copyright (c) 2021, Johannes Stoelp <dev@memzero.de>
 
 #if !defined(__linux__) || !defined(__x86_64__)
 #    error "Only supported in linux(x86_64)!"

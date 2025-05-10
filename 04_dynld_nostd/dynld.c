@@ -1,4 +1,6 @@
-// Copyright (c) 2021 Johannes Stoelp
+// SPDX-License-Identifier: MIT
+//
+// Copyright (c) 2021, Johannes Stoelp <dev@memzero.de>
 
 #include <auxv.h>
 #include <common.h>
